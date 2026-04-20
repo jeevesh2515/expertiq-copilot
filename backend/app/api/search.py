@@ -16,8 +16,11 @@ from slowapi.util import get_remote_address
 from app.auth.dependencies import get_current_user
 from app.config import get_settings
 from app.core.agent import get_agent
+from app.database import get_db
+from app.models.interaction import SearchHistory
 from app.models.user import User
 from app.schemas.search import ErrorResponse, SearchRequest, SearchResponse
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -41,6 +44,7 @@ async def search_experts(
     request: Request,
     search_request: SearchRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Execute the multi-layer AI expert discovery pipeline.
@@ -66,12 +70,20 @@ async def search_experts(
             (time.time() - start_time) * 1000, 2
         )
 
-        logger.info(
-            f"Search completed for user={current_user.email} "
-            f"query='{search_request.query[:50]}...' "
-            f"results={response.get('total_results', 0)} "
-            f"time_ms={response['processing_time_ms']}"
-        )
+        # Record History
+        try:
+            import json
+            history = SearchHistory(
+                user_id=current_user.id,
+                query_text=search_request.query,
+                filters_json=json.dumps(search_request.filters) if search_request.filters else None,
+                result_count=response.get("total_results", 0),
+                processing_time_ms=response.get("processing_time_ms", 0)
+            )
+            db.add(history)
+            db.commit()
+        except Exception as he:
+            logger.warning(f"Failed to record search history: {he}")
 
         return response
 
@@ -94,6 +106,7 @@ async def stream_search_experts(
     request: Request,
     search_request: SearchRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Execute the multi-layer AI expert discovery pipeline and stream the
@@ -102,12 +115,33 @@ async def stream_search_experts(
     try:
         from fastapi.responses import StreamingResponse
         agent = get_agent()
-        return StreamingResponse(
-            agent.stream_run(
+        async def wrapped_stream():
+            import json
+            async for event in agent.stream_run(
                 query=search_request.query,
                 filters=search_request.filters,
                 top_k=search_request.top_k,
-            ),
+            ):
+                yield event
+                # Record once result payload is yielded
+                if event.startswith('data: {"type": "results"'):
+                    try:
+                        payload = json.loads(event[6:])
+                        results_data = payload.get("data", {})
+                        h = SearchHistory(
+                            user_id=current_user.id,
+                            query_text=search_request.query,
+                            filters_json=json.dumps(search_request.filters) if search_request.filters else None,
+                            result_count=results_data.get("total_results", 0),
+                            processing_time_ms=results_data.get("processing_time_ms", 0)
+                        )
+                        db.add(h)
+                        db.commit()
+                    except Exception as he:
+                        logger.warning(f"Failed to record stream history: {he}")
+
+        return StreamingResponse(
+            wrapped_stream(),
             media_type="text/event-stream"
         )
     except Exception as e:

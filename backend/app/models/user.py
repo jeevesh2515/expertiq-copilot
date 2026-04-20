@@ -40,5 +40,18 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    # Relationships
+    bookmarks: Mapped[List["Bookmark"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    search_history: Mapped[List["SearchHistory"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
     def __repr__(self) -> str:
         return f"<User {self.email}>"
+
+# Import here to avoid circular dependencies during type checking
+from typing import TYPE_CHECKING, List
+if TYPE_CHECKING:
+    from app.models.interaction import Bookmark, SearchHistory

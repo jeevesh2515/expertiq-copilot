@@ -22,6 +22,7 @@ from slowapi.util import get_remote_address
 
 from app.api.experts import router as experts_router
 from app.api.health import router as health_router
+from app.api.interactions import router as interaction_router
 from app.api.search import router as search_router
 from app.auth.routes import router as auth_router
 from app.config import get_settings
@@ -253,6 +254,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(experts_router)
 app.include_router(search_router)
+app.include_router(interaction_router)
 
 
 # ── Root Endpoint ──

@@ -152,7 +152,7 @@ export interface ExpertResult {
   publications: string[];
   years_experience: number;
   availability: string;
-  match_score: number;
+  match_score?: number;
   vector_score?: number;
   graph_score?: number;
   llm_score?: number;
@@ -246,6 +246,34 @@ export async function* streamSearchExperts(
       }
     }
   }
+}
+
+// ── Interactions API ──
+
+export interface HistoryEntry {
+  id: number;
+  query: string;
+  result_count: number;
+  processing_time_ms: number;
+  created_at: string;
+}
+
+export async function addBookmark(expertId: string): Promise<void> {
+  await api.post(`/api/bookmarks/${expertId}`);
+}
+
+export async function removeBookmark(expertId: string): Promise<void> {
+  await api.delete(`/api/bookmarks/${expertId}`);
+}
+
+export async function listBookmarks(): Promise<{ experts: ExpertResult[] }> {
+  const response = await api.get<{ experts: ExpertResult[] }>("/api/bookmarks");
+  return response.data;
+}
+
+export async function listHistory(): Promise<{ history: HistoryEntry[] }> {
+  const response = await api.get<{ history: HistoryEntry[] }>("/api/history");
+  return response.data;
 }
 
 // ── Experts API ──

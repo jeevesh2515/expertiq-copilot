@@ -9,13 +9,18 @@ import {
   TrendingUp,
   ChevronDown,
   ChevronUp,
+  Heart,
+  Bookmark as BookmarkIcon,
 } from "lucide-react";
 import { useState } from "react";
 import type { ExpertResult } from "@/lib/api";
+import { addBookmark, removeBookmark } from "@/lib/api";
 
 interface ExpertCardProps {
   expert: ExpertResult;
   rank: number;
+  initBookmarked?: boolean;
+  onBookmarkToggle?: (expertId: string, bookmarked: boolean) => void;
 }
 
 function getScoreColor(score: number): string {
@@ -39,11 +44,35 @@ function getAvailabilityStyle(availability: string): { color: string; dot: strin
   return { color: "text-amber-700", dot: "bg-amber-500" };
 }
 
-export default function ExpertCard({ expert, rank }: ExpertCardProps) {
+export default function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const scoreColor = getScoreColor(expert.match_score);
-  const scoreBg = getScoreBg(expert.match_score);
+  const [bookmarked, setBookmarked] = useState(initBookmarked || false);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+  const hasScore = typeof expert.match_score === "number";
+  const scoreValue = expert.match_score || 0;
+  const scoreColor = getScoreColor(scoreValue);
+  const scoreBg = getScoreBg(scoreValue);
   const availStyle = getAvailabilityStyle(expert.availability);
+
+  const handleBookmark = async () => {
+    setBookmarkLoading(true);
+    try {
+      if (bookmarked) {
+        await removeBookmark(expert.id);
+        setBookmarked(false);
+        onBookmarkToggle?.(expert.id, false);
+      } else {
+        await addBookmark(expert.id);
+        setBookmarked(true);
+        onBookmarkToggle?.(expert.id, true);
+      }
+    } catch (err) {
+      console.error("Bookmark error:", err);
+    } finally {
+      setBookmarkLoading(false);
+    }
+  };
 
   return (
     <div className="group relative">
@@ -63,6 +92,22 @@ export default function ExpertCard({ expert, rank }: ExpertCardProps) {
           </div>
         </div>
       )}
+
+      {/* Bookmark Action */}
+      <div className="absolute top-4 right-4 z-10">
+        <button
+          onClick={handleBookmark}
+          disabled={bookmarkLoading}
+          className={`p-2.5 rounded-2xl border transition-all duration-300 shadow-sm ${
+            bookmarked
+              ? "bg-rose-50 border-rose-200 text-rose-500"
+              : "bg-white border-stone-200 text-stone-300 hover:text-stone-500 hover:border-stone-300"
+          } ${bookmarkLoading ? "opacity-50 cursor-wait" : "cursor-pointer"}`}
+          title={bookmarked ? "Remove bookmark" : "Bookmark expert"}
+        >
+          <Heart className={`w-4 h-4 ${bookmarked ? "fill-rose-500" : ""}`} />
+        </button>
+      </div>
 
       <div className="bg-white border border-stone-200 rounded-3xl p-6 hover:border-stone-300 transition-all duration-300 shadow-sm hover:shadow-md">
         {/* Header */}
@@ -92,14 +137,20 @@ export default function ExpertCard({ expert, rank }: ExpertCardProps) {
           </div>
 
           {/* Score Badge */}
-          <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl border shadow-sm ${scoreBg}`}>
-            <div className={`text-2xl font-black tracking-tighter ${scoreColor}`}>
-              {Math.round(expert.match_score)}
+          {hasScore ? (
+            <div className={`flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl border shadow-sm ${scoreBg}`}>
+              <div className={`text-2xl font-black tracking-tighter ${scoreColor}`}>
+                {Math.round(scoreValue)}
+              </div>
+              <div className={`text-[9px] font-bold uppercase tracking-widest ${scoreColor} opacity-80 -mt-1`}>
+                match
+              </div>
             </div>
-            <div className={`text-[9px] font-bold uppercase tracking-widest ${scoreColor} opacity-80 -mt-1`}>
-              match
+          ) : (
+            <div className="flex-shrink-0 flex flex-col items-center justify-center w-16 h-16 rounded-2xl border border-stone-100 bg-stone-50 shadow-sm">
+              <BookmarkIcon className="w-6 h-6 text-stone-200" />
             </div>
-          </div>
+          )}
         </div>
 
         {/* Meta row */}

@@ -18,7 +18,7 @@ import { addBookmark, removeBookmark } from "@/lib/api";
 
 interface ExpertCardProps {
   expert: ExpertResult;
-  rank: number;
+  rank?: number;
   initBookmarked?: boolean;
   onBookmarkToggle?: (expertId: string, bookmarked: boolean) => void;
 }
@@ -77,7 +77,7 @@ export default function ExpertCard({ expert, rank, initBookmarked, onBookmarkTog
   return (
     <div className="group relative">
       {/* Rank badge */}
-      {rank <= 3 && (
+      {rank && rank > 0 && rank <= 3 && (
         <div className="absolute -top-3 -left-3 z-10">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black shadow-md border-2 border-white ${

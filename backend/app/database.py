@@ -57,4 +57,6 @@ def get_db() -> Session:
 
 def init_db() -> None:
     """Create all tables defined by ORM models."""
+    # Import all models here to register them with Base
+    import app.models
     Base.metadata.create_all(bind=engine)

@@ -5,6 +5,7 @@ POST /api/search triggers the full AI agent pipeline:
 semantic search → graph expansion → LLM re-ranking → summary.
 """
 
+import json
 import logging
 import time
 from typing import Any, Dict
@@ -72,7 +73,6 @@ async def search_experts(
 
         # Record History
         try:
-            import json
             history = SearchHistory(
                 user_id=current_user.id,
                 query_text=search_request.query,
@@ -127,7 +127,7 @@ async def stream_search_experts(
                 if event.startswith('data: {"type": "results"'):
                     try:
                         payload = json.loads(event[6:])
-                        results_data = payload.get("data", {})
+                        results_data = payload.get("data") or {}
                         h = SearchHistory(
                             user_id=current_user.id,
                             query_text=search_request.query,

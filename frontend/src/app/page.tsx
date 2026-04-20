@@ -14,6 +14,10 @@ import {
   X,
   Eye,
   EyeOff,
+  Activity,
+  Filter,
+  Users,
+  Search,
 } from "lucide-react";
 import SearchBar from "@/components/SearchBar";
 import ExpertCard from "@/components/ExpertCard";

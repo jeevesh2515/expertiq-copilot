@@ -2,6 +2,8 @@
 
 import { Sparkles, FileText, Brain } from "lucide-react";
 
+import ReactMarkdown from "react-markdown";
+
 interface ExecutiveSummaryProps {
   summary: string;
   processingTimeMs?: number;
@@ -16,44 +18,46 @@ export default function ExecutiveSummary({
   if (!summary) return null;
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-violet-500/[0.08] via-blue-500/[0.06] to-cyan-500/[0.04] backdrop-blur-md border border-violet-500/[0.15] rounded-xl">
-      {/* Decorative gradient */}
-      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/50 to-transparent" />
+    <div className="relative overflow-hidden bg-white border border-stone-200 rounded-3xl shadow-sm hover:shadow-md transition-shadow duration-300">
+      {/* Decorative top bar */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400" />
 
-      <div className="p-5">
+      <div className="p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-violet-500/20 rounded-lg">
-              <Brain className="w-4 h-4 text-violet-400" />
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-100">
+              <Brain className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Executive Summary</h3>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider">
-                AI-Generated Analysis
+              <h3 className="text-sm font-bold text-stone-900 tracking-tight">Executive Summary</h3>
+              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">
+                AI-Generated Evaluation
               </p>
             </div>
           </div>
           {processingTimeMs && (
-            <div className="text-xs text-white/20">
-              {(processingTimeMs / 1000).toFixed(1)}s
+            <div className="px-2.5 py-1 bg-stone-50 border border-stone-200 rounded-lg text-xs font-bold text-stone-400 font-mono tracking-tight shadow-sm">
+              {(processingTimeMs / 1000).toFixed(2)}s
             </div>
           )}
         </div>
 
         {/* Summary text */}
-        <div className="relative pl-4 border-l-2 border-violet-500/30">
-          <Sparkles className="absolute -left-[9px] top-0 w-4 h-4 text-violet-400 bg-[#0c0a18] rounded-full" />
-          <p className="text-sm text-white/70 leading-relaxed">{summary}</p>
+        <div className="relative pl-5 border-l-2 border-emerald-200">
+          <Sparkles className="absolute -left-[11px] top-0.5 w-5 h-5 text-emerald-500 bg-white p-0.5 shadow-sm rounded-full border border-emerald-100" />
+          <div className="text-sm text-stone-700 font-medium leading-relaxed prose prose-stone max-w-none prose-p:my-2 prose-ul:my-2 prose-li:my-0.5">
+            <ReactMarkdown>{summary}</ReactMarkdown>
+          </div>
         </div>
 
         {/* Query Analysis Chips */}
         {queryAnalysis && (
-          <div className="mt-4 pt-4 border-t border-white/[0.06]">
-            <div className="flex items-center gap-1.5 mb-2">
-              <FileText className="w-3 h-3 text-white/30" />
-              <span className="text-[10px] text-white/30 uppercase tracking-wider">
-                Query Intelligence
+          <div className="mt-6 pt-5 border-t border-stone-100">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="w-4 h-4 text-stone-400" />
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
+                Query Intelligence Vectors
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -61,7 +65,7 @@ export default function ExecutiveSummary({
                 queryAnalysis.detected_industries.map((ind) => (
                   <span
                     key={ind as string}
-                    className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-md text-xs border border-emerald-500/20"
+                    className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold border border-emerald-100 shadow-sm"
                   >
                     {ind as string}
                   </span>
@@ -70,14 +74,14 @@ export default function ExecutiveSummary({
                 queryAnalysis.key_topics.map((topic) => (
                   <span
                     key={topic as string}
-                    className="px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-md text-xs border border-blue-500/20"
+                    className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold border border-amber-100 shadow-sm"
                   >
                     {topic as string}
                   </span>
                 ))}
               {typeof queryAnalysis.intent === "string" && (
-                <span className="px-2 py-0.5 bg-white/[0.05] text-white/40 rounded-md text-xs border border-white/[0.08]">
-                  Intent: {queryAnalysis.intent}
+                <span className="px-2.5 py-1 bg-stone-50 text-stone-600 rounded-lg text-xs font-bold border border-stone-200 shadow-sm flex items-center gap-1.5">
+                  <span className="text-stone-400 font-medium">Intent:</span> {queryAnalysis.intent}
                 </span>
               )}
             </div>

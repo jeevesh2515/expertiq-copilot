@@ -108,6 +108,41 @@ def _call_groq(prompt: str, max_tokens: int = 2000) -> Optional[str]:
         logger.error(f"Groq API call failed: {e}")
         return None
 
+async def _stream_groq(prompt: str, max_tokens: int = 2000):
+    """
+    Call Groq API for LLM inference (Streaming).
+    """
+    if not settings.groq_available:
+        logger.warning("Groq API key not configured. Skipping LLM stream.")
+        return
+
+    try:
+        from groq import AsyncGroq
+
+        client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+        stream = await client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert research analyst at a leading expert network. "
+                        "You evaluate expert profiles for relevance to research queries. "
+                        "Be precise, analytical, and data-driven in your assessments."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.3,
+            stream=True
+        )
+        async for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+    except Exception as e:
+        logger.error(f"Groq API stream failed: {e}")
+
 
 # ═══════════════════════════════════════
 # AGENT NODES
@@ -573,6 +608,87 @@ class ExpertDiscoveryAgent:
         response = state.get("response", {})
         response["processing_time_ms"] = round(time.time() * 1000 - start_time, 2)
         return response
+
+    async def stream_run(
+        self,
+        query: str,
+        filters: Optional[Dict[str, Any]] = None,
+        top_k: int = 10,
+    ):
+        """
+        Execute the agent pipeline and stream the executive summary as SSE.
+        Yields JSON events:
+        - data: {"type": "results", "data": <SearchResponse without summary>}
+        - data: {"type": "chunk", "text": "..."}
+        - data: {"type": "done"}
+        """
+        start_time = time.time() * 1000
+
+        state: AgentState = {
+            "query": query,
+            "filters": filters,
+            "top_k": top_k,
+            "errors": [],
+            "_start_time": start_time,
+        }
+
+        # Run nodes 1-4 (Up to Reranker)
+        for node_name, node_fn in self.nodes[:4]:
+            try:
+                state = node_fn(state)
+            except Exception as e:
+                error_msg = f"Node {node_name} failed: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                state.setdefault("errors", []).append(error_msg)
+                
+        # Run ResponseBuilder early without summary
+        state["executive_summary"] = None
+        state = response_builder(state)
+        
+        response = state.get("response", {})
+        response["processing_time_ms"] = round(time.time() * 1000 - start_time, 2)
+        
+        yield f"data: {json.dumps({'type': 'results', 'data': response})}\n\n"
+
+        # Now run stream generation derived from Summariser node
+        ranked = state.get("ranked_candidates", [])
+        if not ranked:
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+            
+        top_5 = ranked[:5]
+        expert_details = []
+        for i, c in enumerate(top_5, 1):
+            meta = c.get("metadata", {})
+            name = meta.get("name", "Unknown")
+            title = meta.get("title", "N/A")
+            company = meta.get("company", "N/A")
+            score = c.get("match_score", 0)
+            reasoning = c.get("ai_reasoning", "Strong domain match")
+            expert_details.append(
+                f"{i}. {name} ({title}, {company}) — Score: {score}/100 — {reasoning}"
+            )
+
+        details_text = "\n".join(expert_details)
+        prompt = f'''Write a 150-word executive summary for a research manager reviewing these expert recommendations.
+
+Research Query: "{query}"
+
+Top Recommended Experts:
+{details_text}
+
+The summary should:
+1. Briefly restate the research need
+2. Highlight why these specific experts are the best matches
+3. Note any complementary expertise across the group
+4. Suggest an optimal engagement strategy (e.g., which expert to consult first)
+
+Write in professional, concise prose. Do not use bullet points. Do not exceed 150 words.'''
+
+        async for chunk in _stream_groq(prompt, max_tokens=400):
+            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+            
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
 # Singleton

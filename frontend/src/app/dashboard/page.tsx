@@ -22,11 +22,11 @@ interface IndustryCount {
 }
 
 const INDUSTRY_COLORS: Record<string, string> = {
-  FinTech: "bg-violet-500",
-  HealthTech: "bg-emerald-500",
-  "Climate Tech": "bg-cyan-500",
-  EdTech: "bg-amber-500",
-  RegTech: "bg-rose-500",
+  FinTech: "bg-emerald-500",
+  HealthTech: "bg-rose-400",
+  "Climate Tech": "bg-teal-500",
+  EdTech: "bg-amber-400",
+  RegTech: "bg-stone-500",
 };
 
 export default function DashboardPage() {
@@ -63,7 +63,7 @@ export default function DashboardPage() {
               .map(([name, count]) => ({
                 name,
                 count,
-                color: INDUSTRY_COLORS[name] || "bg-gray-500",
+                color: INDUSTRY_COLORS[name] || "bg-stone-300",
               }))
               .sort((a, b) => b.count - a.count)
           );
@@ -79,26 +79,26 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen text-stone-900 font-sans bg-[#FAF9F6]">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#07060d]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-stone-200 bg-[#FAF9F6]/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <a
               href="/"
-              className="flex items-center gap-2 text-white/40 hover:text-white/60 transition-colors"
+              className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors font-medium border border-stone-200 bg-white shadow-sm px-3 py-1.5 rounded-lg"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm">Back to Search</span>
             </a>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-gradient-to-br from-violet-500 to-blue-600 rounded-lg">
-              <Brain className="w-5 h-5 text-white" />
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100 shadow-sm">
+              <Brain className="w-4 h-4" />
             </div>
             <div>
-              <h1 className="text-base font-bold text-white">Dashboard</h1>
-              <p className="text-[10px] text-white/30 -mt-0.5">
+              <h1 className="text-sm font-bold text-stone-900 leading-none">Dashboard</h1>
+              <p className="text-[10px] text-stone-400 font-semibold tracking-wider uppercase mt-0.5">
                 System Overview
               </p>
             </div>
@@ -108,87 +108,89 @@ export default function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-slide-up">
           {[
             {
               icon: Users,
               label: "Expert Profiles",
               value: loading ? "..." : expertCount.toString(),
               sub: "Across 5 industries",
-              color: "violet",
+              color: "emerald",
             },
             {
               icon: Database,
               label: "Vector Embeddings",
               value: loading ? "..." : expertCount.toString(),
               sub: "384-dim per profile",
-              color: "blue",
+              color: "teal",
             },
             {
               icon: Network,
               label: "Graph Nodes",
               value: loading ? "..." : `${expertCount * 4}+`,
               sub: "Expert · Company · Industry · Topic",
-              color: "emerald",
+              color: "amber",
             },
             {
               icon: Activity,
               label: "API Status",
               value: health?.status === "healthy" ? "Healthy" : loading ? "..." : "Offline",
               sub: health ? `v${health.version}` : "Checking...",
-              color: health?.status === "healthy" ? "emerald" : "amber",
+              color: health?.status === "healthy" ? "emerald" : "rose",
             },
           ].map((stat) => (
             <div
               key={stat.label}
-              className="p-5 bg-white/[0.03] border border-white/[0.06] rounded-xl hover:bg-white/[0.05] transition-all duration-300"
+              className="p-5 bg-white border border-stone-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300"
             >
               <div className="flex items-center justify-between mb-3">
                 <stat.icon
                   className={`w-5 h-5 ${
-                    stat.color === "violet"
-                      ? "text-violet-400"
-                      : stat.color === "blue"
-                      ? "text-blue-400"
-                      : stat.color === "emerald"
-                      ? "text-emerald-400"
-                      : "text-amber-400"
+                    stat.color === "emerald"
+                      ? "text-emerald-500"
+                      : stat.color === "teal"
+                      ? "text-teal-500"
+                      : stat.color === "amber"
+                      ? "text-amber-500"
+                      : "text-rose-500"
                   }`}
                 />
-                <span className="text-[10px] text-white/20 uppercase tracking-wider">
+                <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">
                   {stat.label}
                 </span>
               </div>
-              <div className="text-2xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs text-white/30 mt-0.5">{stat.sub}</div>
+              <div className="text-2xl font-black text-stone-800 tracking-tight">{stat.value}</div>
+              <div className="text-xs font-medium text-stone-500 mt-1">{stat.sub}</div>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-slide-up">
           {/* Industry Distribution */}
-          <div className="p-6 bg-white/[0.03] border border-white/[0.06] rounded-xl">
-            <div className="flex items-center gap-2 mb-5">
-              <BarChart3 className="w-4 h-4 text-violet-400" />
-              <h3 className="text-sm font-semibold text-white">
-                Expert Distribution by Industry
+          <div className="p-7 bg-white border border-stone-200 rounded-3xl shadow-sm">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-1.5 bg-amber-50 rounded-lg">
+                <BarChart3 className="w-4 h-4 text-amber-500" />
+              </div>
+              <h3 className="text-sm font-bold text-stone-800">
+                Data Density by Industry
               </h3>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {industries.map((ind) => {
                 const pct = expertCount > 0 ? (ind.count / expertCount) * 100 : 0;
                 return (
-                  <div key={ind.name}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-white/60">{ind.name}</span>
-                      <span className="text-xs text-white/30">
+                  <div key={ind.name} className="group">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-semibold text-stone-600">{ind.name}</span>
+                      <span className="text-xs font-semibold text-stone-400">
                         {ind.count} experts ({Math.round(pct)}%)
                       </span>
                     </div>
-                    <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
+                    <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden shadow-inner">
                       <div
-                        className={`h-full rounded-full ${ind.color} transition-all duration-700`}
+                        className={`h-full rounded-full ${ind.color} transition-all duration-1000 ease-out`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -196,25 +198,27 @@ export default function DashboardPage() {
                 );
               })}
               {industries.length === 0 && !loading && (
-                <p className="text-sm text-white/20">
+                <div className="py-8 text-center text-sm font-medium text-stone-400 bg-stone-50 border border-stone-100 rounded-2xl">
                   {authed
                     ? "No expert data available."
                     : "Sign in to view expert analytics."}
-                </p>
+                </div>
               )}
             </div>
           </div>
 
           {/* System Info */}
-          <div className="p-6 bg-white/[0.03] border border-white/[0.06] rounded-xl">
-            <div className="flex items-center gap-2 mb-5">
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-semibold text-white">
+          <div className="p-7 bg-white border border-stone-200 rounded-3xl shadow-sm">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-1.5 bg-emerald-50 rounded-lg">
+                <Shield className="w-4 h-4 text-emerald-500" />
+              </div>
+              <h3 className="text-sm font-bold text-stone-800">
                 System Architecture
               </h3>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-1">
               {[
                 {
                   label: "Embedding Model",
@@ -254,13 +258,13 @@ export default function DashboardPage() {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="flex items-center justify-between py-2 border-b border-white/[0.04] last:border-0"
+                  className="flex items-center justify-between py-3 border-b border-stone-100 last:border-0 hover:bg-stone-50 px-2 -mx-2 rounded-lg transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <item.icon className="w-3.5 h-3.5 text-white/20" />
-                    <span className="text-sm text-white/40">{item.label}</span>
+                  <div className="flex items-center gap-2.5">
+                    <item.icon className="w-4 h-4 text-stone-400" />
+                    <span className="text-sm font-medium text-stone-600">{item.label}</span>
                   </div>
-                  <span className="text-sm text-white/60 font-mono">
+                  <span className="text-xs font-semibold text-stone-500 font-mono tracking-tight bg-stone-100 px-2 py-1 rounded border border-stone-200">
                     {item.value}
                   </span>
                 </div>

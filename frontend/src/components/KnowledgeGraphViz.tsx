@@ -9,17 +9,17 @@ interface KnowledgeGraphVizProps {
 }
 
 const NODE_COLORS: Record<string, { fill: string; stroke: string }> = {
-  expert: { fill: "#8b5cf6", stroke: "#a78bfa" },
-  company: { fill: "#3b82f6", stroke: "#60a5fa" },
-  industry: { fill: "#10b981", stroke: "#34d399" },
-  topic: { fill: "#f59e0b", stroke: "#fbbf24" },
+  expert: { fill: "#10b981", stroke: "#059669" }, // emerald
+  company: { fill: "#0f766e", stroke: "#115e59" }, // teal
+  industry: { fill: "#f59e0b", stroke: "#d97706" }, // amber
+  topic: { fill: "#a8a29e", stroke: "#78716c" }, // stone
 };
 
 const NODE_RADIUS: Record<string, number> = {
-  expert: 8,
-  company: 10,
-  industry: 12,
-  topic: 6,
+  expert: 9,
+  company: 11,
+  industry: 13,
+  topic: 7,
 };
 
 interface SimNode extends GraphNode {
@@ -149,18 +149,18 @@ export default function KnowledgeGraphViz({ data }: KnowledgeGraphVizProps) {
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
         ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = "rgba(255,255,255,0.06)";
-        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
 
       // Draw nodes
       for (const node of nodes) {
         const colors = NODE_COLORS[node.type] || NODE_COLORS.topic;
-        const radius = NODE_RADIUS[node.type] || 6;
+        const radius = NODE_RADIUS[node.type] || 7;
         const isHovered = hoveredNode?.id === node.id;
 
-        // Glow
+        // Shadow/glow
         if (isHovered) {
           ctx.beginPath();
           ctx.arc(node.x, node.y, radius * 2.5, 0, Math.PI * 2);
@@ -173,17 +173,24 @@ export default function KnowledgeGraphViz({ data }: KnowledgeGraphVizProps) {
         ctx.arc(node.x, node.y, isHovered ? radius * 1.3 : radius, 0, Math.PI * 2);
         ctx.fillStyle = colors.fill;
         ctx.fill();
+        ctx.strokeStyle = "white"; // White border for clean punch-out effect
+        ctx.lineWidth = isHovered ? 2.5 : 1.5;
+        ctx.stroke();
         ctx.strokeStyle = colors.stroke;
-        ctx.lineWidth = isHovered ? 2 : 1;
+        ctx.lineWidth = isHovered ? 1 : 0.5;
         ctx.stroke();
 
         // Label (only for larger nodes or hovered)
         if (node.type !== "topic" || isHovered) {
-          ctx.font = `${isHovered ? "bold " : ""}${isHovered ? 11 : 9}px Inter, system-ui, sans-serif`;
-          ctx.fillStyle = isHovered ? "white" : "rgba(255,255,255,0.5)";
+          ctx.font = `${isHovered ? "bold " : "500 "}${isHovered ? 11 : 9}px Inter, system-ui, sans-serif`;
+          ctx.fillStyle = isHovered ? "#1c1917" : "#78716c";
           ctx.textAlign = "center";
-          const label = node.label.length > 18 ? node.label.slice(0, 16) + "…" : node.label;
-          ctx.fillText(label, node.x, node.y + radius + 12);
+          const label = node.label.length > 20 ? node.label.slice(0, 18) + "…" : node.label;
+          // Soft text shadow for readability
+          ctx.shadowColor = "rgba(255,255,255,0.8)";
+          ctx.shadowBlur = 4;
+          ctx.fillText(label, node.x, node.y + radius + (isHovered ? 14 : 12));
+          ctx.shadowBlur = 0; // reset
         }
       }
 
@@ -223,63 +230,68 @@ export default function KnowledgeGraphViz({ data }: KnowledgeGraphVizProps) {
   if (!data.nodes.length) return null;
 
   return (
-    <div className="bg-white/[0.03] backdrop-blur-md border border-white/[0.08] rounded-xl overflow-hidden">
+    <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-        <div className="flex items-center gap-2">
-          <Network className="w-4 h-4 text-violet-400" />
-          <span className="text-sm font-medium text-white/70">Knowledge Graph</span>
-          <span className="text-xs text-white/30">
-            {data.nodes.length} nodes · {data.edges.length} edges
-          </span>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 bg-stone-50/50">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-amber-50 rounded-lg">
+            <Network className="w-4 h-4 text-amber-500" />
+          </div>
+          <div>
+            <span className="text-sm font-bold text-stone-900 block leading-tight">Knowledge Graph</span>
+            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-0.5 block">
+              {data.nodes.length} nodes · {data.edges.length} edges
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 bg-white border border-stone-200 rounded-lg p-1 shadow-sm">
           <button
             onClick={() => setZoom((z) => Math.max(0.3, z - 0.2))}
-            className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.05] transition-colors"
+            className="p-1.5 rounded-md text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors"
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          <span className="text-xs text-white/30 w-10 text-center">{Math.round(zoom * 100)}%</span>
+          <span className="text-[10px] font-bold text-stone-500 w-9 text-center">{Math.round(zoom * 100)}%</span>
           <button
             onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
-            className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.05] transition-colors"
+            className="p-1.5 rounded-md text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors"
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="w-3.5 h-3.5" />
           </button>
+          <div className="w-[1px] h-4 bg-stone-200 mx-0.5" />
           <button
             onClick={() => {
               setZoom(1);
               offsetRef.current = { x: 0, y: 0 };
             }}
-            className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/[0.05] transition-colors"
+            className="p-1.5 rounded-md text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition-colors title='Reset'"
           >
-            <Maximize2 className="w-4 h-4" />
+            <Maximize2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
       {/* Canvas */}
-      <div ref={containerRef} className="relative" style={{ height: "360px" }}>
-        <canvas ref={canvasRef} className="w-full h-full" />
+      <div ref={containerRef} className="relative bg-[#FAF9F6] bg-[radial-gradient(#e5e5e5_1px,transparent_1px)] [background-size:16px_16px]" style={{ height: "400px" }}>
+        <canvas ref={canvasRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
         {/* Tooltip */}
         {hoveredNode && (
-          <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 pointer-events-none">
-            <div className="text-sm text-white font-medium">{hoveredNode.label}</div>
-            <div className="text-xs text-white/40 capitalize">{hoveredNode.type}</div>
+          <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md border border-stone-200 shadow-xl rounded-xl px-4 py-2 pointer-events-none">
+            <div className="text-sm text-stone-900 font-bold tracking-tight">{hoveredNode.label}</div>
+            <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-0.5">{hoveredNode.type}</div>
           </div>
         )}
 
         {/* Legend */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-3">
+        <div className="absolute bottom-4 right-4 flex items-center gap-3 bg-white/80 backdrop-blur-md border border-stone-200 px-4 py-2 rounded-xl shadow-sm">
           {Object.entries(NODE_COLORS).map(([type, colors]) => (
-            <div key={type} className="flex items-center gap-1">
+            <div key={type} className="flex items-center gap-1.5">
               <div
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: colors.fill }}
+                className="w-2.5 h-2.5 rounded-full border"
+                style={{ backgroundColor: colors.fill, borderColor: colors.stroke }}
               />
-              <span className="text-[10px] text-white/30 capitalize">{type}</span>
+              <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{type}</span>
             </div>
           ))}
         </div>

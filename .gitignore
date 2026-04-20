@@ -51,3 +51,6 @@ htmlcov/
 
 # Logs
 *.log
+
+# GSD Data
+.planning/

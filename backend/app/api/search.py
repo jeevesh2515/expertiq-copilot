@@ -81,3 +81,38 @@ async def search_experts(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Search pipeline encountered an error. Please try again.",
         )
+
+@router.post(
+    "/search/stream",
+    summary="AI-powered expert search with streaming summary",
+    responses={
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+)
+async def stream_search_experts(
+    request: Request,
+    search_request: SearchRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Execute the multi-layer AI expert discovery pipeline and stream the
+    executive summary back using Server-Sent Events (SSE).
+    """
+    try:
+        from fastapi.responses import StreamingResponse
+        agent = get_agent()
+        return StreamingResponse(
+            agent.stream_run(
+                query=search_request.query,
+                filters=search_request.filters,
+                top_k=search_request.top_k,
+            ),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.error(f"Streaming search failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Streaming pipeline encountered an error. Please try again.",
+        )

@@ -193,6 +193,61 @@ export async function searchExperts(
   return response.data;
 }
 
+export async function* streamSearchExperts(
+  data: SearchRequest
+): AsyncGenerator<any, void, unknown> {
+  const token = localStorage.getItem("access_token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/search/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw { response: { status: 401 } };
+    }
+    throw new Error("Failed to start stream");
+  }
+
+  if (!response.body) {
+    throw new Error("ReadableStream not supported");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    
+    const lines = buffer.split("\n\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const dataStr = line.slice(6);
+        try {
+          const payload = JSON.parse(dataStr);
+          yield payload;
+        } catch (e) {
+          console.error("Failed to parse SSE payload", line);
+        }
+      }
+    }
+  }
+}
+
 // ── Experts API ──
 
 export interface ExpertListResponse {

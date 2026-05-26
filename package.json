@@ -1,0 +1,21 @@
+{
+  "name": "expertiq-copilot-root",
+  "version": "1.0.0",
+  "description": "ExpertIQ Copilot - Root Management",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "cd backend && venv/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    "dev:backend:reload": "cd backend && venv/bin/python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev": "npm run dev:all",
+    "dev:all": "zsh -lc 'trap \"kill 0\" INT TERM EXIT; npm run dev:backend & npm run dev:frontend & wait'",
+    "build:frontend": "npm run build --prefix frontend",
+    "start:frontend": "npm run start --prefix frontend",
+    "start:backend": "cd backend && venv/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    "demo": "zsh -lc 'trap \"kill 0\" INT TERM EXIT; npm run start:backend & npm run start:frontend & wait'",
+    "demo:lite": "zsh ./scripts/demo-lite.sh",
+    "clean:frontend": "rm -rf frontend/.next",
+    "clean:backend-cache": "rm -rf backend/.pytest_cache backend/chroma_db && find backend -path '*/__pycache__' -type d -prune -exec rm -rf {} +",
+    "clean:caches": "npm run clean:frontend && npm run clean:backend-cache",
+    "install:all": "npm install --prefix frontend && cd backend && venv/bin/pip install -r requirements.txt"
+  }
+}

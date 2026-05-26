@@ -45,14 +45,21 @@ async def get_current_user_optional(
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
     db: Session = Depends(get_db),
 ) -> User:
     """
     FastAPI dependency: extract and validate the current user from JWT.
 
+    Raises 403 if the credentials are not provided.
     Raises 401 if the token is invalid, expired, or the user doesn't exist.
     """
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authenticated",
+        )
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",

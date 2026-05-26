@@ -304,57 +304,8 @@ def vector_searcher(state: AgentState) -> AgentState:
     top_k = max(state.get("top_k", 20) * 2, 12)
     filters = state.get("filters")
 
-    web_candidates = []
-    try:
-        import requests
-        import urllib.parse
-        import uuid
-        safe_query = urllib.parse.quote_plus(query)
-        url = f"https://api.crossref.org/works?query={safe_query}&select=author,title,URL,subject,published&rows={top_k}"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            for item in data.get("message", {}).get("items", []):
-                authors = item.get("author", [])
-                if not authors: continue
-                author = authors[0]
-                name = f"{author.get('given', '')} {author.get('family', '')}".strip()
-                if not name: continue
-                company = "Independent Researcher"
-                aff = author.get("affiliation", [])
-                if aff and isinstance(aff, list) and len(aff) > 0:
-                    company = aff[0].get("name", company)
-                paper_title = item.get("title", [""])[0]
-                href = item.get("URL", "")
-                subjects = item.get("subject", [query])
-                topics = subjects[0] if subjects else query
-                bio = f"Author of '{paper_title}'. Discovered via real-time Crossref academic database search."
-                
-                web_candidates.append({
-                    "id": str(uuid.uuid4()),
-                    "metadata": {
-                        "name": name,
-                        "title": "Academic Researcher",
-                        "company": company[:50],
-                        "industry": "Academia / Research",
-                        "seniority": "Senior",
-                        "topics": topics[:50],
-                        "years_experience": "10",
-                        "availability": "available",
-                        "bio": bio,
-                        "publications": href,
-                    },
-                    "document": bio,
-                    "similarity_score": 95.0,
-                    "local_reasoning": "Real-world academic expert discovered via Crossref API.",
-                })
-    except Exception as e:
-        logger.error(f"Crossref search failed: {e}")
-
-    if web_candidates:
-        state["vector_results"] = web_candidates
-    else:
-        if settings.SEARCH_BACKEND == "pro":
+    if settings.SEARCH_BACKEND == "pro":
+        try:
             from app.core.llm_search import get_llm_semantic_search
             search_engine = get_llm_semantic_search()
             results = search_engine.vector_store.semantic_search(query=query, top_k=top_k, filters=filters)
@@ -368,10 +319,14 @@ def vector_searcher(state: AgentState) -> AgentState:
                 }
                 for r in results
             ]
-        else:
+        except Exception as exc:
+            logger.warning("Pro search backend unavailable, falling back to lightweight: %s", exc)
             search_engine = get_lightweight_search_engine()
             state["vector_results"] = search_engine.search(query=query, top_k=top_k, filters=filters)
-            
+    else:
+        search_engine = get_lightweight_search_engine()
+        state["vector_results"] = search_engine.search(query=query, top_k=top_k, filters=filters)
+
     return state
 
 

@@ -7,7 +7,7 @@ Passwords are hashed with bcrypt (12 rounds) via passlib.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -22,8 +22,17 @@ from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# bcrypt hashing with 12 rounds
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+class PwdContext:
+    def hash(self, password: str) -> str:
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(12)).decode("utf-8")
+
+    def verify(self, password: str, hashed: str) -> bool:
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+        except Exception:
+            return False
+
+pwd_context = PwdContext()
 
 
 # ── Request / Response Schemas ──

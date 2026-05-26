@@ -292,8 +292,8 @@ export default function HomePage() {
                 <div className="animate-slide-up" style={{ animationDelay: '100ms' }}>
                   <ExecutiveSummary 
                     summary={searchResults.executive_summary} 
-                    analysis={searchResults.query_analysis}
-                    processingTime={searchResults.processing_time_ms}
+                    queryAnalysis={searchResults.query_analysis}
+                    processingTimeMs={searchResults.processing_time_ms}
                   />
                 </div>
               )}

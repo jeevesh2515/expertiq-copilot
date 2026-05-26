@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_db"
 
     # ── Search Runtime ──
-    SEARCH_BACKEND: str = "pro"
+    SEARCH_BACKEND: str = "lightweight"
 
     # ── Frontend ──
     FRONTEND_URL: str = "http://localhost:3000"
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # Max experts for graph operations
     GRAPH_MAX_TRAVERSAL_RESULTS: int = 20
     # Graph feature toggle for local low-memory demos
-    ENABLE_KNOWLEDGE_GRAPH: bool = True
+    ENABLE_KNOWLEDGE_GRAPH: bool = False
     # Optional startup prewarm (loads all experts into in-memory index)
     PREWARM_LIGHTWEIGHT_INDEX: bool = False
     # Payload caps to avoid large response bodies

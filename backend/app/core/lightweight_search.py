@@ -5,6 +5,8 @@ This module replaces the heavyweight embedding/vector-store startup path
 with a zero-download, zero-ML-index fallback that runs comfortably on a
 typical laptop. It keeps the same search contract used by the API while
 using deterministic token and phrase scoring over the local SQLite data.
+
+No network calls, no ML models — pure in-memory text scoring.
 """
 
 from __future__ import annotations
@@ -16,9 +18,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from math import sqrt
 from typing import Any, Dict, Iterable, List, Optional
-import uuid
-import requests
-import urllib.parse
 
 from app.database import SessionLocal
 from app.models.expert import Expert
@@ -159,83 +158,25 @@ class LightweightSearchEngine:
             return []
 
         candidates: List[Dict[str, Any]] = []
-        
-        # Real-world web search using Crossref API (Academic Experts)
-        try:
-            safe_query = urllib.parse.quote_plus(query)
-            url = f"https://api.crossref.org/works?query={safe_query}&select=author,title,URL,subject,published&rows={top_k}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                items = data.get("message", {}).get("items", [])
-                for item in items:
-                    authors = item.get("author", [])
-                    if not authors:
-                        continue
-                    
-                    # Take the first author as the expert
-                    author = authors[0]
-                    given = author.get("given", "")
-                    family = author.get("family", "")
-                    name = f"{given} {family}".strip()
-                    if not name:
-                        continue
-                        
-                    title = "Academic Researcher"
-                    company = "Independent Researcher"
-                    affiliations = author.get("affiliation", [])
-                    if affiliations and isinstance(affiliations, list) and len(affiliations) > 0:
-                        company = affiliations[0].get("name", company)
-                        
-                    paper_title = item.get("title", [""])[0]
-                    href = item.get("URL", "")
-                    subjects = item.get("subject", [query])
-                    topics = subjects[0] if subjects else query
-                    
-                    bio = f"Author of '{paper_title}'. Discovered via real-time Crossref academic database search."
-                    
-                    candidates.append({
-                        "id": str(uuid.uuid4()),
-                        "document": bio,
-                        "metadata": {
-                            "name": name,
-                            "title": title,
-                            "company": company[:50],
-                            "industry": "Academia / Research",
-                            "seniority": "Senior",
-                            "topics": topics[:50],
-                            "years_experience": "10",
-                            "availability": "available",
-                            "bio": bio,
-                            "publications": href, # Provides direct link to their paper!
-                        },
-                        "distance": 0.1,
-                        "similarity_score": 95.0,
-                        "local_reasoning": "Real-world academic expert discovered via Crossref API.",
-                    })
-        except Exception as e:
-            logger.error(f"Crossref search failed: {e}")
-                
-        # If web search failed or didn't return enough, fallback to local DB
-        if not candidates:
-            for indexed in self._experts:
-                if not self._matches_filters(indexed.expert, filters):
-                    continue
-    
-                score, reasoning = self._score(indexed, query, query_tokens)
-                if score <= 0:
-                    continue
-    
-                candidates.append(
-                    {
-                        "id": indexed.expert["id"],
-                        "document": indexed.fields["full_text"],
-                        "metadata": self._metadata(indexed.expert),
-                        "distance": round(max(0.0, 1 - score / 100), 4),
-                        "similarity_score": round(score, 2),
-                        "local_reasoning": reasoning,
-                    }
-                )
+
+        for indexed in self._experts:
+            if not self._matches_filters(indexed.expert, filters):
+                continue
+
+            score, reasoning = self._score(indexed, query, query_tokens)
+            if score <= 0:
+                continue
+
+            candidates.append(
+                {
+                    "id": indexed.expert["id"],
+                    "document": indexed.fields["full_text"],
+                    "metadata": self._metadata(indexed.expert),
+                    "distance": round(max(0.0, 1 - score / 100), 4),
+                    "similarity_score": round(score, 2),
+                    "local_reasoning": reasoning,
+                }
+            )
 
         candidates.sort(
             key=lambda item: (

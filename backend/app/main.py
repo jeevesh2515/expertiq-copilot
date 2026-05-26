@@ -16,7 +16,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
@@ -30,6 +30,7 @@ from app.config import get_settings
 from app.database import SessionLocal, init_db
 from app.models.expert import Expert
 from app.core.monitoring import get_monitoring
+from app.core.limiter import limiter
 
 settings = get_settings()
 
@@ -40,9 +41,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("expertiq")
-
-# ── Rate Limiter ──
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ── Application Lifespan ──

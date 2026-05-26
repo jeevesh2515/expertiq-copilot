@@ -11,9 +11,6 @@ import time
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
 from app.auth.dependencies import get_current_user
 from app.config import get_settings
 from app.core.agent import get_agent
@@ -22,14 +19,13 @@ from app.models.interaction import SearchHistory
 from app.models.user import User
 from app.schemas.search import ErrorResponse, SearchRequest, SearchResponse
 from sqlalchemy.orm import Session
+from app.core.limiter import limiter
+from app.core.cache import get_cache_manager
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/api", tags=["Search"])
-
-# Rate limiter instance
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post(
@@ -41,6 +37,7 @@ limiter = Limiter(key_func=get_remote_address)
         500: {"model": ErrorResponse, "description": "Internal server error"},
     },
 )
+@limiter.limit("10/minute")
 async def search_experts(
     request: Request,
     search_request: SearchRequest,
@@ -48,7 +45,7 @@ async def search_experts(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
-    Execute the multi-layer AI expert discovery pipeline.
+    Execute the multi-layer AI expert discovery pipeline with secure caching.
 
     Pipeline layers:
     1. Semantic vector search (ChromaDB + sentence-transformers)
@@ -58,6 +55,16 @@ async def search_experts(
     Rate limited to 10 requests per minute per user.
     """
     start_time = time.time()
+
+    # Construct secure, user-specific cache key to prevent data leak injections
+    filters_str = json.dumps(search_request.filters, sort_keys=True) if search_request.filters else ""
+    cache_key = f"search:{current_user.id}:{search_request.query}:{search_request.top_k}:{search_request.include_graph}:{filters_str}"
+
+    cache = get_cache_manager()
+    cached_response = cache.get(cache_key)
+    if cached_response is not None:
+        logger.info(f"✓ Cache hit for search query: {search_request.query[:50]}")
+        return cached_response
 
     try:
         agent = get_agent()
@@ -71,6 +78,12 @@ async def search_experts(
         response["processing_time_ms"] = round(
             (time.time() - start_time) * 1000, 2
         )
+
+        # Store in cache
+        try:
+            cache.set(cache_key, response, ttl=600)  # cache for 10 minutes
+        except Exception as ce:
+            logger.warning(f"Failed to cache search response: {ce}")
 
         try:
             history = SearchHistory(

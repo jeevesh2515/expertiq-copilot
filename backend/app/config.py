@@ -39,6 +39,8 @@ class Settings(BaseSettings):
 
     # ── Database ──
     DATABASE_URL: str = "sqlite:///./expertiq.db"
+    REDIS_URL: str = "redis://localhost:6379"
+    ENABLE_REDIS_CACHE: bool = True
 
     # ── ChromaDB ──
     CHROMA_PERSIST_DIR: str = "./chroma_db"

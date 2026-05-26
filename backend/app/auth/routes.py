@@ -6,7 +6,7 @@ Passwords are hashed with bcrypt (12 rounds) via passlib.
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 import bcrypt
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.auth.jwt_handler import (
 )
 from app.database import get_db
 from app.models.user import User
+from app.core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -86,17 +87,19 @@ class UserProfile(BaseModel):
     status_code=status.HTTP_201_CREATED,
     summary="Register a new account",
 )
+@limiter.limit("5/minute")
 async def register(
-    request: RegisterRequest,
+    request: Request,
+    register_request: RegisterRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """
-    Register a new user account.
+    Register a new user account with rate limiting.
 
     Hashes the password with bcrypt and returns a JWT token pair.
     """
     # Check for existing user
-    existing = db.query(User).filter(User.email == request.email).first()
+    existing = db.query(User).filter(User.email == register_request.email).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -105,9 +108,9 @@ async def register(
 
     # Create user with hashed password
     user = User(
-        email=request.email,
-        hashed_password=pwd_context.hash(request.password),
-        full_name=request.full_name,
+        email=register_request.email,
+        hashed_password=pwd_context.hash(register_request.password),
+        full_name=register_request.full_name,
     )
     db.add(user)
     db.commit()
@@ -126,17 +129,19 @@ async def register(
     response_model=TokenResponse,
     summary="Login to get JWT tokens",
 )
+@limiter.limit("5/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    login_request: LoginRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """
-    Authenticate with email and password.
+    Authenticate with email and password with rate limiting.
 
     Returns a JWT access + refresh token pair on success.
     """
-    user = db.query(User).filter(User.email == request.email).first()
-    if not user or not pwd_context.verify(request.password, user.hashed_password):
+    user = db.query(User).filter(User.email == login_request.email).first()
+    if not user or not pwd_context.verify(login_request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

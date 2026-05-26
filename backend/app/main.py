@@ -24,10 +24,12 @@ from app.api.experts import router as experts_router
 from app.api.health import router as health_router
 from app.api.interactions import router as interaction_router
 from app.api.search import router as search_router
+from app.api.monitoring import router as monitoring_router
 from app.auth.routes import router as auth_router
 from app.config import get_settings
 from app.database import SessionLocal, init_db
 from app.models.expert import Expert
+from app.core.monitoring import get_monitoring
 
 settings = get_settings()
 
@@ -74,8 +76,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             logger.info(f"✓ Found {expert_count} existing experts.")
 
-        # 3. Prewarm search index
-        if settings.PREWARM_LIGHTWEIGHT_INDEX:
+        if settings.SEARCH_BACKEND == "pro":
+            try:
+                from app.core.vector_store_pro import get_production_vector_store
+                experts = db.query(Expert).all()
+                pro_store = get_production_vector_store()
+                if pro_store.expert_collection.count() == 0:
+                    pro_store.upsert_expert_profiles([expert.to_dict() for expert in experts])
+                logger.info("✓ Production vector store prewarmed.")
+            except Exception as e:
+                logger.warning(f"⚠ Production vector store prewarm deferred: {e}")
+        elif settings.PREWARM_LIGHTWEIGHT_INDEX:
             try:
                 from app.core.lightweight_search import get_lightweight_search_engine
 
@@ -212,6 +223,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 # ── Register Routers ──
 app.include_router(health_router)
+app.include_router(monitoring_router)  # Production monitoring endpoints
 app.include_router(auth_router)
 app.include_router(experts_router)
 app.include_router(search_router)

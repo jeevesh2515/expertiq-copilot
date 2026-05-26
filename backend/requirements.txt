@@ -12,6 +12,9 @@ sqlalchemy==2.0.23
 fastembed==0.2.7
 chromadb==0.4.21
 
+# Knowledge Graph
+networkx==3.2.1
+
 # Utilities
 python-dotenv==1.0.0
 pydantic==2.5.3

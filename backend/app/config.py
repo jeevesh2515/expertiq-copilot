@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # ── Database ──
-    DATABASE_URL: str = "sqlite:///./expertiq.db"
+    DATABASE_URL: str = "postgresql://postgres:CHANGE_ME@localhost:5432/expertiq"
     REDIS_URL: str = "redis://localhost:6379"
     ENABLE_REDIS_CACHE: bool = True
 

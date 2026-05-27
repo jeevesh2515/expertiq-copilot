@@ -7,6 +7,7 @@ python-multipart>=0.0.6
 # Database
 sqlalchemy>=2.0.23
 redis>=5.0.1
+psycopg2-binary>=2.9.0
 
 # Auth
 python-jose[cryptography]>=3.3.0

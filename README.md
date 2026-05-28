@@ -63,6 +63,25 @@ Expert network platforms rely on connecting investment researchers, consultants,
 
 ---
 
+## 🔍 LangSmith Tracing & Observability
+
+To achieve production-grade reliability and debug alignment latency, **ExpertIQ Copilot** fully integrates **LangSmith Tracing**. Every invocation of the `ExpertDiscoveryAgent` creates a single parent span, which wraps and nestedly traces all **6 orchestration nodes** chronologically:
+
+1. **QueryAnalyser**: Extracts search intent, key topics, and detected industries.
+2. **VectorSearcher**: Queries ChromaDB/FastEmbed for high-probability semantic candidates.
+3. **GraphExpander**: Explores multi-hop relation networks via NetworkX graph connections.
+4. **Reranker**: Employs Groq LLM reasoning to evaluate candidate scores (1-10) and logic.
+5. **Summariser**: Formulates a clear executive research summary of top candidates.
+6. **ResponseBuilder**: Constructs structured JSON response payloads.
+
+### Nested Execution Spans in LangSmith
+Below is the trace tree showing precise latency, query inputs, and success statuses across all nodes:
+
+![ExpertIQ Copilot LangSmith Trace Tree](assets/langsmith_dashboard_trace.png)
+
+---
+
+
 ## 🛡️ Enterprise-Grade Security & System Optimizations
 
 ### 1. Robust Injection Protection

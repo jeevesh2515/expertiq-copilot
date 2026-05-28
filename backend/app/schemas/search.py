@@ -31,6 +31,10 @@ class SearchRequest(BaseModel):
         le=50,
         description="Number of results to return",
     )
+    include_graph: bool = Field(
+        default=False,
+        description="Include knowledge graph nodes and edges in the response",
+    )
 
     @field_validator("query")
     @classmethod
@@ -38,6 +42,30 @@ class SearchRequest(BaseModel):
         """Strip HTML tags and dangerous content from the query."""
         cleaned = bleach.clean(v, tags=[], strip=True)
         return cleaned.strip()
+
+    @field_validator("filters")
+    @classmethod
+    def sanitize_filters(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Sanitize all values inside the filters dictionary to prevent injections."""
+        if not v:
+            return v
+        sanitized = {}
+        for key, value in v.items():
+            clean_key = bleach.clean(str(key), tags=[], strip=True).strip()
+            if not clean_key:
+                continue
+            if isinstance(value, str):
+                sanitized[clean_key] = bleach.clean(value, tags=[], strip=True).strip()
+            elif isinstance(value, list):
+                sanitized[clean_key] = [
+                    bleach.clean(str(item), tags=[], strip=True).strip() if isinstance(item, str) else item
+                    for item in value
+                ]
+            elif isinstance(value, dict):
+                sanitized[clean_key] = cls.sanitize_filters(value)
+            else:
+                sanitized[clean_key] = value
+        return sanitized
 
 
 class GraphNode(BaseModel):

@@ -1,76 +1,204 @@
 /**
- * API client for ExpertIQ Copilot backend.
+ * Lightweight API client for the ExpertIQ Copilot backend.
  *
- * Handles authentication, request/response interceptors,
- * and typed API methods.
+ * Uses the browser's native fetch API with a small auth/refresh layer
+ * to keep the frontend dependency tree and runtime overhead lean.
  */
-
-import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const REQUEST_TIMEOUT_MS = 30000;
 
-/**
- * Create a configured axios instance with auth interceptor.
- */
-function createApiClient(): AxiosInstance {
-  const client = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    timeout: 30000,
-  });
+type QueryValue = string | number | boolean | undefined | null;
 
-  // Request interceptor: attach JWT token
-  client.interceptors.request.use(
-    (config: InternalAxiosRequestConfig) => {
-      if (typeof window !== "undefined") {
-        const token = localStorage.getItem("access_token");
-        if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      }
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
-
-  // Response interceptor: handle 401 → try refresh
-  client.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-      const originalRequest = error.config;
-      if (error.response?.status === 401 && !originalRequest._retry) {
-        originalRequest._retry = true;
-        try {
-          const refreshToken = localStorage.getItem("refresh_token");
-          if (refreshToken) {
-            const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-              refresh_token: refreshToken,
-            });
-            localStorage.setItem("access_token", data.access_token);
-            localStorage.setItem("refresh_token", data.refresh_token);
-            originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
-            return client(originalRequest);
-          }
-        } catch {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-          if (typeof window !== "undefined") {
-            window.location.href = "/";
-          }
-        }
-      }
-      return Promise.reject(error);
-    }
-  );
-
-  return client;
+interface RequestOptions extends Omit<RequestInit, "body"> {
+  body?: unknown;
+  params?: Record<string, QueryValue>;
+  skipAuth?: boolean;
+  skipRefresh?: boolean;
 }
 
-export const api = createApiClient();
+interface ErrorPayload {
+  detail?: string;
+  [key: string]: unknown;
+}
 
-// ── Auth API ──
+class HttpError extends Error {
+  response: {
+    status: number;
+    data?: ErrorPayload | string;
+  };
+
+  constructor(message: string, status: number, data?: ErrorPayload | string) {
+    super(message);
+    this.name = "HttpError";
+    this.response = { status, data };
+  }
+}
+
+function buildUrl(path: string, params?: Record<string, QueryValue>): string {
+  const url = new URL(path, API_BASE_URL);
+  if (!params) return url.toString();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  return url.toString();
+}
+
+function getStoredToken(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(name);
+}
+
+function setStoredTokens(tokens: TokenResponse): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("access_token", tokens.access_token);
+  localStorage.setItem("refresh_token", tokens.refresh_token);
+}
+
+export function logout(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+}
+
+function toErrorPayload(data: unknown): ErrorPayload | string | undefined {
+  if (typeof data === "string") return data;
+  if (data && typeof data === "object") return data as ErrorPayload;
+  return undefined;
+}
+
+function readErrorMessage(
+  data: ErrorPayload | string | undefined,
+  statusText: string
+): string {
+  if (typeof data === "string" && data.trim()) return data;
+  if (
+    data &&
+    typeof data === "object" &&
+    typeof data.detail === "string" &&
+    data.detail.trim()
+  ) {
+    return data.detail;
+  }
+  return statusText || "Request failed";
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+
+  let payload: unknown;
+  if (response.status !== 204) {
+    payload = isJson ? await response.json() : await response.text();
+  }
+
+  if (!response.ok) {
+    const errorPayload = toErrorPayload(payload);
+    throw new HttpError(
+      readErrorMessage(errorPayload, response.statusText),
+      response.status,
+      errorPayload
+    );
+  }
+
+  return payload as T;
+}
+
+async function performRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const {
+    body,
+    params,
+    headers,
+    skipAuth = false,
+    skipRefresh = false,
+    ...init
+  } = options;
+
+  const requestHeaders = new Headers(headers);
+  const token = skipAuth ? null : getStoredToken("access_token");
+
+  if (token) {
+    requestHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
+  let requestBody: BodyInit | undefined;
+  if (body !== undefined) {
+    requestHeaders.set("Content-Type", "application/json");
+    requestBody = JSON.stringify(body);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(buildUrl(path, params), {
+      ...init,
+      headers: requestHeaders,
+      body: requestBody,
+      signal: controller.signal,
+    });
+
+    if (
+      response.status === 401 &&
+      !skipRefresh &&
+      !skipAuth &&
+      typeof window !== "undefined" &&
+      path !== "/auth/refresh"
+    ) {
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        return performRequest<T>(path, { ...options, skipRefresh: true });
+      }
+
+      logout();
+      window.location.href = "/";
+    }
+
+    return await parseResponse<T>(response);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new HttpError("Request timed out", 408, { detail: "Request timed out" });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function refreshSession(): Promise<boolean> {
+  const refreshToken = getStoredToken("refresh_token");
+  if (!refreshToken) return false;
+
+  try {
+    const tokens = await performRequest<TokenResponse>("/auth/refresh", {
+      method: "POST",
+      body: { refresh_token: refreshToken },
+      skipAuth: true,
+      skipRefresh: true,
+    });
+    setStoredTokens(tokens);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const api = {
+  get<T>(path: string, options: Omit<RequestOptions, "method" | "body"> = {}) {
+    return performRequest<T>(path, { ...options, method: "GET" });
+  },
+  post<T>(path: string, body?: unknown, options: Omit<RequestOptions, "method" | "body"> = {}) {
+    return performRequest<T>(path, { ...options, method: "POST", body });
+  },
+  delete<T>(path: string, options: Omit<RequestOptions, "method" | "body"> = {}) {
+    return performRequest<T>(path, { ...options, method: "DELETE" });
+  },
+};
+
+// -- Auth API --
 
 export interface LoginRequest {
   email: string;
@@ -98,35 +226,32 @@ export interface UserProfile {
 }
 
 export async function login(data: LoginRequest): Promise<TokenResponse> {
-  const response = await api.post<TokenResponse>("/auth/login", data);
-  localStorage.setItem("access_token", response.data.access_token);
-  localStorage.setItem("refresh_token", response.data.refresh_token);
-  return response.data;
+  const response = await api.post<TokenResponse>("/auth/login", data, {
+    skipAuth: true,
+    skipRefresh: true,
+  });
+  setStoredTokens(response);
+  return response;
 }
 
 export async function register(data: RegisterRequest): Promise<TokenResponse> {
-  const response = await api.post<TokenResponse>("/auth/register", data);
-  localStorage.setItem("access_token", response.data.access_token);
-  localStorage.setItem("refresh_token", response.data.refresh_token);
-  return response.data;
-}
-
-export function logout(): void {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
+  const response = await api.post<TokenResponse>("/auth/register", data, {
+    skipAuth: true,
+    skipRefresh: true,
+  });
+  setStoredTokens(response);
+  return response;
 }
 
 export async function getProfile(): Promise<UserProfile> {
-  const response = await api.get<UserProfile>("/auth/me");
-  return response.data;
+  return api.get<UserProfile>("/auth/me");
 }
 
 export function isAuthenticated(): boolean {
-  if (typeof window === "undefined") return false;
-  return !!localStorage.getItem("access_token");
+  return !!getStoredToken("access_token");
 }
 
-// ── Search API ──
+// -- Search API --
 
 export interface SearchFilters {
   industry?: string;
@@ -138,6 +263,7 @@ export interface SearchRequest {
   query: string;
   filters?: SearchFilters;
   top_k?: number;
+  include_graph?: boolean;
 }
 
 export interface ExpertResult {
@@ -186,69 +312,33 @@ export interface SearchResponse {
   processing_time_ms?: number;
 }
 
-export async function searchExperts(
-  data: SearchRequest
-): Promise<SearchResponse> {
-  const response = await api.post<SearchResponse>("/api/search", data);
-  return response.data;
-}
-
-export async function* streamSearchExperts(
-  data: SearchRequest
-): AsyncGenerator<any, void, unknown> {
-  const token = localStorage.getItem("access_token");
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+export interface ApiErrorLike {
+  message?: string;
+  response?: {
+    status?: number;
+    data?: {
+      detail?: string;
+    } | string;
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/search/stream`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw { response: { status: 401 } };
-    }
-    throw new Error("Failed to start stream");
-  }
-
-  if (!response.body) {
-    throw new Error("ReadableStream not supported");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    
-    const lines = buffer.split("\n\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const dataStr = line.slice(6);
-        try {
-          const payload = JSON.parse(dataStr);
-          yield payload;
-        } catch (e) {
-          console.error("Failed to parse SSE payload", line);
-        }
-      }
-    }
-  }
 }
 
-// ── Interactions API ──
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  const apiError = error as ApiErrorLike;
+  const detail = apiError.response?.data;
+
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object" && typeof detail.detail === "string") {
+    return detail.detail;
+  }
+
+  return apiError.message || fallback;
+}
+
+export async function searchExperts(data: SearchRequest): Promise<SearchResponse> {
+  return api.post<SearchResponse>("/api/search", data);
+}
+
+// -- Interactions API --
 
 export interface HistoryEntry {
   id: number;
@@ -259,24 +349,22 @@ export interface HistoryEntry {
 }
 
 export async function addBookmark(expertId: string): Promise<void> {
-  await api.post(`/api/bookmarks/${expertId}`);
+  await api.post<void>(`/api/bookmarks/${expertId}`);
 }
 
 export async function removeBookmark(expertId: string): Promise<void> {
-  await api.delete(`/api/bookmarks/${expertId}`);
+  await api.delete<void>(`/api/bookmarks/${expertId}`);
 }
 
 export async function listBookmarks(): Promise<{ experts: ExpertResult[] }> {
-  const response = await api.get<{ experts: ExpertResult[] }>("/api/bookmarks");
-  return response.data;
+  return api.get<{ experts: ExpertResult[] }>("/api/bookmarks");
 }
 
 export async function listHistory(): Promise<{ history: HistoryEntry[] }> {
-  const response = await api.get<{ history: HistoryEntry[] }>("/api/history");
-  return response.data;
+  return api.get<{ history: HistoryEntry[] }>("/api/history");
 }
 
-// ── Experts API ──
+// -- Experts API --
 
 export interface ExpertListResponse {
   experts: ExpertResult[];
@@ -291,30 +379,28 @@ export async function listExperts(params?: {
   industry?: string;
   seniority?: string;
 }): Promise<ExpertListResponse> {
-  const response = await api.get<ExpertListResponse>("/api/experts", {
-    params,
-  });
-  return response.data;
+  return api.get<ExpertListResponse>("/api/experts", { params });
 }
 
 export async function getExpert(id: string): Promise<ExpertResult> {
-  const response = await api.get<ExpertResult>(`/api/experts/${id}`);
-  return response.data;
+  return api.get<ExpertResult>(`/api/experts/${id}`);
 }
 
-// ── Health API ──
+// -- Health API --
 
 export interface HealthResponse {
   status: string;
   service: string;
   version: string;
+  environment?: string;
+  timestamp?: string;
   features: {
     llm_available: boolean;
-    embedding_model: string;
+    embedding_model: string | null;
+    search_backend?: string;
   };
 }
 
 export async function checkHealth(): Promise<HealthResponse> {
-  const response = await api.get<HealthResponse>("/api/health");
-  return response.data;
+  return api.get<HealthResponse>("/api/health");
 }

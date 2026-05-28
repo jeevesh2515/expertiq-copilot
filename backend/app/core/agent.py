@@ -1,17 +1,14 @@
 """
-LangGraph multi-step AI agent for expert discovery.
+Lightweight expert discovery agent.
 
-Implements a 6-node StateGraph pipeline:
-  1. QueryAnalyser — Parse query, extract intent, entities, domain
-  2. VectorSearcher — ChromaDB semantic search (top 20)
-  3. GraphExpander — NetworkX 2-hop traversal for adjacent experts
-  4. Reranker — Groq LLM scores each candidate 1-10 with reasoning
-  5. Summariser — Groq LLM generates executive summary of top 5
-  6. ResponseBuilder — Formats final JSON response
-
-Gracefully degrades if Groq API key is not configured — vector
-search and graph results are still returned without LLM scoring.
+The original project booted a vector database, downloaded an ONNX model,
+and optionally called a remote LLM for every search. That made local demos
+feel heavy and fragile. This agent keeps the same API contract but uses a
+fast local ranking path by default, with remote LLM enrichment left as an
+explicit opt-in.
 """
+
+from __future__ import annotations
 
 import json
 import logging
@@ -20,181 +17,265 @@ import time
 from typing import Any, Dict, List, Optional, TypedDict
 
 from app.config import get_settings
-from app.core.knowledge_graph import get_knowledge_graph
-from app.core.rag_pipeline import get_rag_pipeline
-from app.core.vector_store import get_vector_store
+from app.core.lightweight_search import get_lightweight_search_engine
+from langsmith import traceable
+
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-# ═══════════════════════════════════════
-# STATE DEFINITION
-# ═══════════════════════════════════════
-
-
 class AgentState(TypedDict, total=False):
-    """Typed state passed between agent nodes."""
-
-    # Input
     query: str
     filters: Optional[Dict[str, Any]]
     top_k: int
-
-    # QueryAnalyser output
     query_analysis: Dict[str, Any]
-
-    # VectorSearcher output
     vector_results: List[Dict[str, Any]]
-
-    # GraphExpander output
     graph_results: Dict[str, Any]
     graph_expert_ids: List[str]
-
-    # Combined candidates
     candidates: List[Dict[str, Any]]
-
-    # Reranker output
     ranked_candidates: List[Dict[str, Any]]
-
-    # Summariser output
     executive_summary: Optional[str]
-
-    # Final response
     response: Dict[str, Any]
-
-    # Metadata
     processing_time_ms: float
     errors: List[str]
+    _start_time: float
+    include_graph: bool
 
 
-# ═══════════════════════════════════════
-# GROQ LLM HELPER
-# ═══════════════════════════════════════
+def _get_model_chain() -> List[str]:
+    models = [settings.GROQ_MODEL]
+    for fallback in settings.GROQ_MODEL_FALLBACKS:
+        if fallback not in models:
+            models.append(fallback)
+    return models
 
 
 def _call_groq(prompt: str, max_tokens: int = 2000) -> Optional[str]:
-    """
-    Call Groq API for LLM inference.
-
-    Returns None if Groq is not configured or the call fails.
-    """
     if not settings.groq_available:
-        logger.warning("Groq API key not configured. Skipping LLM call.")
         return None
 
     try:
         from groq import Groq
-
-        client = Groq(api_key=settings.GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model=settings.GROQ_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert research analyst at a leading expert network. "
-                        "You evaluate expert profiles for relevance to research queries. "
-                        "Be precise, analytical, and data-driven in your assessments."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=0.3,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        logger.error(f"Groq API call failed: {e}")
+    except Exception as exc:  # pragma: no cover - optional dependency path
+        logger.warning("Groq client unavailable, falling back to local mode: %s", exc)
         return None
 
+    client = Groq(api_key=settings.GROQ_API_KEY)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an expert research analyst evaluating expert profiles "
+                "for relevance to a research request. Be concise and concrete."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+
+    for model in _get_model_chain():
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:  # pragma: no cover - network-dependent
+            error_text = str(exc).lower()
+            if "decommissioned" in error_text or "not found" in error_text:
+                logger.warning("Groq model %s unavailable, trying fallback.", model)
+                continue
+            logger.warning("Groq call failed, continuing in local mode: %s", exc)
+            return None
+
+    return None
+
+
 async def _stream_groq(prompt: str, max_tokens: int = 2000):
-    """
-    Call Groq API for LLM inference (Streaming).
-    """
     if not settings.groq_available:
-        logger.warning("Groq API key not configured. Skipping LLM stream.")
         return
 
     try:
         from groq import AsyncGroq
+    except Exception as exc:  # pragma: no cover - optional dependency path
+        logger.warning("Groq async client unavailable, falling back to local mode: %s", exc)
+        return
 
-        client = AsyncGroq(api_key=settings.GROQ_API_KEY)
-        stream = await client.chat.completions.create(
-            model=settings.GROQ_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert research analyst at a leading expert network. "
-                        "You evaluate expert profiles for relevance to research queries. "
-                        "Be precise, analytical, and data-driven in your assessments."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=0.3,
-            stream=True
-        )
-        async for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
-    except Exception as e:
-        logger.error(f"Groq API stream failed: {e}")
+    client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an expert research analyst evaluating expert profiles "
+                "for relevance to a research request. Be concise and concrete."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+
+    for model in _get_model_chain():
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.2,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+            return
+        except Exception as exc:  # pragma: no cover - network-dependent
+            error_text = str(exc).lower()
+            if "decommissioned" in error_text or "not found" in error_text:
+                logger.warning("Groq stream model %s unavailable, trying fallback.", model)
+                continue
+            logger.warning("Groq stream failed, continuing in local mode: %s", exc)
+            return
 
 
-# ═══════════════════════════════════════
-# AGENT NODES
-# ═══════════════════════════════════════
+def _tokenise_query(query: str) -> List[str]:
+    return re.findall(r"[a-z0-9]+", query.lower())
 
 
+def _local_reasoning(candidate: Dict[str, Any], query_analysis: Dict[str, Any]) -> str:
+    meta = candidate.get("metadata", {})
+    topics = {topic.strip().lower() for topic in str(meta.get("topics", "")).split(",") if topic.strip()}
+    industries = {industry.lower() for industry in query_analysis.get("detected_industries", [])}
+    query_terms = set(query_analysis.get("entities", []))
+
+    matched_topics = sorted(topic for topic in topics if any(term in topic for term in query_terms))
+    notes: List[str] = []
+
+    if matched_topics:
+        notes.append(f"direct topic overlap in {', '.join(matched_topics[:3])}")
+
+    if meta.get("industry", "").lower() in industries:
+        notes.append(f"strong {meta.get('industry')} industry fit")
+
+    years_experience = int(meta.get("years_experience", 0) or 0)
+    if years_experience >= 15:
+        notes.append(f"{years_experience} years of senior operating experience")
+
+    if candidate.get("graph_discovered"):
+        notes.append("reinforced by related graph connections")
+
+    if not notes:
+        notes.append("relevant profile language and experience signals")
+
+    return "Good match because of " + ", ".join(notes) + "."
+
+
+def _local_summary(query: str, ranked: List[Dict[str, Any]]) -> str:
+    if not ranked:
+        return ""
+
+    top_candidates = ranked[:3]
+    names = []
+    strengths = []
+    for candidate in top_candidates:
+        meta = candidate.get("metadata", {})
+        names.append(meta.get("name", "Unknown"))
+        if candidate.get("ai_reasoning"):
+            strengths.append(candidate["ai_reasoning"])
+
+    summary = (
+        f'This search used the lightweight local retrieval engine to rank experts for "{query}". '
+        f"Top matches include {', '.join(names)}. "
+    )
+
+    if strengths:
+        summary += "They surfaced because " + " ".join(strengths[:2]) + " "
+
+    summary += (
+        "For a demo, this mode keeps latency low and avoids the model-download "
+        "and vector-index overhead that was previously making startup unstable."
+    )
+    return summary.strip()
+
+
+def _summary_chunks(summary: str, chunk_size: int = 120) -> List[str]:
+    return [summary[i:i + chunk_size] for i in range(0, len(summary), chunk_size)] or [summary]
+
+
+@traceable(name="QueryAnalyser")
 def query_analyser(state: AgentState) -> AgentState:
-    """
-    Node 1: Parse the user query to extract intent, entities, and domain.
 
-    Uses keyword extraction and optional LLM analysis.
-    """
     query = state["query"]
-    start = time.time()
+    words = _tokenise_query(query)
 
-    # Basic keyword extraction (always available)
-    words = query.lower().split()
     stop_words = {
-        "find", "search", "looking", "for", "with", "who", "has",
-        "experience", "in", "the", "a", "an", "and", "or", "of",
-        "experts", "expert", "someone", "people", "professionals",
+        "find",
+        "search",
+        "looking",
+        "for",
+        "with",
+        "who",
+        "has",
+        "experience",
+        "in",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "experts",
+        "expert",
+        "someone",
+        "people",
+        "professionals",
     }
-    entities = [w for w in words if w not in stop_words and len(w) > 2]
+    entities = [word for word in words if word not in stop_words and len(word) > 2]
 
-    # Industry detection
     industry_keywords = {
-        "fintech": "FinTech", "finance": "FinTech", "banking": "FinTech",
-        "payment": "FinTech", "trading": "FinTech", "crypto": "FinTech",
-        "health": "HealthTech", "medical": "HealthTech", "pharma": "HealthTech",
-        "drug": "HealthTech", "clinical": "HealthTech", "genomics": "HealthTech",
-        "climate": "Climate Tech", "carbon": "Climate Tech", "energy": "Climate Tech",
-        "solar": "Climate Tech", "hydrogen": "Climate Tech", "sustainability": "Climate Tech",
-        "education": "EdTech", "learning": "EdTech", "teaching": "EdTech",
-        "edtech": "EdTech", "tutoring": "EdTech", "assessment": "EdTech",
-        "regulation": "RegTech", "compliance": "RegTech", "regulatory": "RegTech",
-        "regtech": "RegTech", "aml": "RegTech", "kyc": "RegTech",
+        "fintech": "FinTech",
+        "finance": "FinTech",
+        "banking": "FinTech",
+        "payment": "FinTech",
+        "trading": "FinTech",
+        "crypto": "FinTech",
+        "health": "HealthTech",
+        "medical": "HealthTech",
+        "pharma": "HealthTech",
+        "drug": "HealthTech",
+        "clinical": "HealthTech",
+        "genomics": "HealthTech",
+        "climate": "Climate Tech",
+        "carbon": "Climate Tech",
+        "energy": "Climate Tech",
+        "solar": "Climate Tech",
+        "hydrogen": "Climate Tech",
+        "sustainability": "Climate Tech",
+        "education": "EdTech",
+        "learning": "EdTech",
+        "teaching": "EdTech",
+        "edtech": "EdTech",
+        "tutoring": "EdTech",
+        "assessment": "EdTech",
+        "regulation": "RegTech",
+        "compliance": "RegTech",
+        "regulatory": "RegTech",
+        "regtech": "RegTech",
+        "aml": "RegTech",
+        "kyc": "RegTech",
     }
 
-    detected_industries = set()
-    for word in words:
-        for keyword, industry in industry_keywords.items():
-            if keyword in word:
-                detected_industries.add(industry)
+    detected_industries = sorted(
+        {industry for word in words for keyword, industry in industry_keywords.items() if keyword in word}
+    )
 
-    analysis = {
+    analysis: Dict[str, Any] = {
         "original_query": query,
         "entities": entities,
-        "detected_industries": list(detected_industries),
+        "detected_industries": detected_industries,
         "query_type": "expert_search",
     }
 
-    # Optional LLM-powered analysis
     llm_result = _call_groq(
         f"""Analyse this expert search query and extract structured information.
 Query: "{query}"
@@ -212,211 +293,214 @@ Return ONLY valid JSON, no other text.""",
 
     if llm_result:
         try:
-            # Extract JSON from response
             json_match = re.search(r"\{.*\}", llm_result, re.DOTALL)
             if json_match:
-                llm_analysis = json.loads(json_match.group())
-                analysis.update(llm_analysis)
+                analysis.update(json.loads(json_match.group()))
         except (json.JSONDecodeError, AttributeError):
-            logger.warning("Failed to parse LLM query analysis.")
+            logger.warning("Failed to parse LLM query analysis; using local analysis only.")
 
     state["query_analysis"] = analysis
     return state
 
 
+@traceable(name="VectorSearcher")
 def vector_searcher(state: AgentState) -> AgentState:
-    """
-    Node 2: Semantic search using ChromaDB vector store.
 
-    Retrieves top-k experts by cosine similarity.
-    """
     query = state["query"]
-    top_k = state.get("top_k", 20)
+    top_k = max(state.get("top_k", 20) * 2, 12)
     filters = state.get("filters")
 
-    vector_store = get_vector_store()
+    if settings.SEARCH_BACKEND == "pro":
+        try:
+            from app.core.llm_search import get_llm_semantic_search
+            search_engine = get_llm_semantic_search()
+            results = search_engine.vector_store.semantic_search(query=query, top_k=top_k, filters=filters)
+            state["vector_results"] = [
+                {
+                    "id": r["id"],
+                    "metadata": r.get("metadata", {}),
+                    "document": r.get("content", ""),
+                    "similarity_score": r.get("similarity", 0) * 100,
+                    "local_reasoning": "Found via local ChromaDB vector search.",
+                }
+                for r in results
+            ]
+        except Exception as exc:
+            logger.warning("Pro search backend unavailable, falling back to lightweight: %s", exc)
+            search_engine = get_lightweight_search_engine()
+            state["vector_results"] = search_engine.search(query=query, top_k=top_k, filters=filters)
+    else:
+        search_engine = get_lightweight_search_engine()
+        state["vector_results"] = search_engine.search(query=query, top_k=top_k, filters=filters)
 
-    # Build ChromaDB filters from user filters
-    chroma_filters = None
-    if filters:
-        filter_conditions = []
-        if "industry" in filters and filters["industry"]:
-            filter_conditions.append({"industry": filters["industry"]})
-        if "seniority" in filters and filters["seniority"]:
-            filter_conditions.append({"seniority": filters["seniority"]})
-        if "availability" in filters and filters["availability"]:
-            filter_conditions.append({"availability": filters["availability"]})
-
-        if len(filter_conditions) == 1:
-            chroma_filters = filter_conditions[0]
-        elif len(filter_conditions) > 1:
-            chroma_filters = {"$and": filter_conditions}
-
-    results = vector_store.search_experts(
-        query=query,
-        top_k=top_k,
-        filters=chroma_filters,
-    )
-
-    state["vector_results"] = results
     return state
 
 
+@traceable(name="GraphExpander")
 def graph_expander(state: AgentState) -> AgentState:
-    """
-    Node 3: Expand results using knowledge graph traversal.
 
-    Takes entities from query analysis and performs 2-hop
-    traversal to find contextually adjacent experts.
-    """
+    if not settings.ENABLE_KNOWLEDGE_GRAPH or not state.get("include_graph", False):
+        state["graph_results"] = {"expert_ids": [], "nodes": [], "edges": []}
+        state["graph_expert_ids"] = []
+        state["candidates"] = [
+            {
+                "id": result["id"],
+                "metadata": result.get("metadata", {}),
+                "document": result.get("document", ""),
+                "vector_score": result.get("similarity_score", 0),
+                "graph_discovered": False,
+                "source": "local-search",
+                "local_reasoning": result.get("local_reasoning"),
+            }
+            for result in state.get("vector_results", [])
+        ]
+        return state
+
     analysis = state.get("query_analysis", {})
-    entities = analysis.get("entities", [])
+    entities = list(analysis.get("entities", []))
+    entities.extend(analysis.get("key_topics", []))
+    entities.extend(analysis.get("detected_industries", []))
+    entities = sorted(set(entities))
 
-    # Add LLM-extracted topics if available
-    key_topics = analysis.get("key_topics", [])
-    entities.extend(key_topics)
-
-    # Add detected industries
-    industries = analysis.get("detected_industries", [])
-    entities.extend(industries)
-
-    # Deduplicate
-    entities = list(set(entities))
+    from app.core.knowledge_graph import get_knowledge_graph
 
     kg = get_knowledge_graph()
     graph_data = kg.traverse(
         query_entities=entities,
         max_hops=2,
-        max_results=20,
+        max_results=settings.GRAPH_MAX_TRAVERSAL_RESULTS,
     )
 
     state["graph_results"] = graph_data
     state["graph_expert_ids"] = graph_data.get("expert_ids", [])
 
-    # Merge vector results with graph-discovered experts
     vector_results = state.get("vector_results", [])
-    vector_ids = {r["id"] for r in vector_results}
+    vector_ids = {result["id"] for result in vector_results}
+    candidates: List[Dict[str, Any]] = []
 
-    # Combine: vector results + new graph-discovered experts
-    candidates = []
-    for vr in vector_results:
-        candidate = {
-            "id": vr["id"],
-            "metadata": vr.get("metadata", {}),
-            "document": vr.get("document", ""),
-            "vector_score": vr.get("similarity_score", 0),
-            "graph_discovered": vr["id"] in graph_data.get("expert_ids", []),
-            "source": "vector",
-        }
-        candidates.append(candidate)
+    for result in vector_results:
+        candidates.append(
+            {
+                "id": result["id"],
+                "metadata": result.get("metadata", {}),
+                "document": result.get("document", ""),
+                "vector_score": result.get("similarity_score", 0),
+                "graph_discovered": result["id"] in graph_data.get("expert_ids", []),
+                "source": "local-search",
+                "local_reasoning": result.get("local_reasoning"),
+            }
+        )
 
-    # Add graph-only experts (not already in vector results)
+    search_engine = get_lightweight_search_engine()
     for expert_id in graph_data.get("expert_ids", []):
-        if expert_id not in vector_ids:
-            candidates.append({
+        if expert_id in vector_ids:
+            continue
+
+        expert = search_engine.get_expert(expert_id)
+        if not expert:
+            continue
+
+        candidates.append(
+            {
                 "id": expert_id,
-                "metadata": {},
-                "document": "",
-                "vector_score": 0,
+                "metadata": search_engine._metadata(expert),  # noqa: SLF001
+                "document": _stringify_candidate_document(expert),
+                "vector_score": 45.0,
                 "graph_discovered": True,
                 "source": "graph",
-            })
+                "local_reasoning": "Surfaced from related industry, topic, or company graph links.",
+            }
+        )
 
     state["candidates"] = candidates
     return state
 
 
-def reranker(state: AgentState) -> AgentState:
-    """
-    Node 4: LLM-powered re-ranking of candidates.
+def _stringify_candidate_document(expert: Dict[str, Any]) -> str:
+    topics = ", ".join(expert.get("topics", []))
+    publications = "; ".join(expert.get("publications", [])[:3])
+    return (
+        f"{expert.get('name', '')} - {expert.get('title', '')} at {expert.get('company', '')}. "
+        f"Industry: {expert.get('industry', '')}. Topics: {topics}. Publications: {publications}. "
+        f"{expert.get('bio', '')}"
+    )
 
-    Calls Groq to score each candidate 1-10 with detailed reasoning.
-    Falls back to vector scores if LLM is unavailable.
-    """
+
+@traceable(name="Reranker")
+def reranker(state: AgentState) -> AgentState:
+
     candidates = state.get("candidates", [])
     query = state["query"]
+    query_analysis = state.get("query_analysis", {})
 
     if not candidates:
         state["ranked_candidates"] = []
         return state
 
-    # Build context for LLM
-    rag_pipeline = get_rag_pipeline()
-    expert_summaries = []
-    for i, c in enumerate(candidates[:15], 1):
-        meta = c.get("metadata", {})
-        name = meta.get("name", "Unknown")
-        title = meta.get("title", "N/A")
-        company = meta.get("company", "N/A")
-        industry = meta.get("industry", "N/A")
-        topics = meta.get("topics", "N/A")
-        bio_preview = c.get("document", "")[:200]
-        expert_summaries.append(
-            f"{i}. {name} | {title} at {company} | {industry} | "
-            f"Topics: {topics} | Bio: {bio_preview}..."
-        )
+    llm_result: Optional[str] = None
+    if settings.groq_available:
+        expert_summaries = []
+        for index, candidate in enumerate(candidates[:15], 1):
+            meta = candidate.get("metadata", {})
+            expert_summaries.append(
+                f"{index}. {meta.get('name', 'Unknown')} | {meta.get('title', 'N/A')} at "
+                f"{meta.get('company', 'N/A')} | {meta.get('industry', 'N/A')} | "
+                f"Topics: {meta.get('topics', 'N/A')}"
+            )
 
-    expert_text = "\n".join(expert_summaries)
-
-    llm_result = _call_groq(
-        f"""You are evaluating expert candidates for this research query:
+        llm_result = _call_groq(
+            f"""You are evaluating expert candidates for this research query:
 "{query}"
 
 Here are the candidates:
-{expert_text}
+{chr(10).join(expert_summaries)}
 
-For each candidate, provide a score from 1-10 and a brief reasoning (1-2 sentences).
-Return a JSON array of objects with "index" (1-based), "score" (1-10), and "reasoning" fields.
+For each candidate, provide a score from 1-10 and a brief reasoning.
+Return a JSON array of objects with "index", "score", and "reasoning".
+Return ONLY valid JSON.""",
+            max_tokens=1200,
+        )
 
-Return ONLY valid JSON array, no other text.""",
-        max_tokens=2000,
-    )
-
+    ranking_map: Dict[int, Dict[str, Any]] = {}
     if llm_result:
         try:
-            # Extract JSON array from response
             json_match = re.search(r"\[.*\]", llm_result, re.DOTALL)
             if json_match:
                 rankings = json.loads(json_match.group())
-                ranking_map = {r["index"]: r for r in rankings}
+                ranking_map = {item["index"]: item for item in rankings}
+        except (json.JSONDecodeError, AttributeError, KeyError):
+            logger.warning("Failed to parse LLM reranking; using local scoring.")
 
-                for i, candidate in enumerate(candidates[:15], 1):
-                    if i in ranking_map:
-                        candidate["llm_score"] = ranking_map[i].get("score", 5)
-                        candidate["ai_reasoning"] = ranking_map[i].get("reasoning", "")
-                        # Combined score: weighted blend of vector + LLM
-                        vector_weight = 0.4
-                        llm_weight = 0.6
-                        candidate["match_score"] = round(
-                            (candidate.get("vector_score", 50) * vector_weight)
-                            + (candidate["llm_score"] * 10 * llm_weight),
-                            2,
-                        )
-        except (json.JSONDecodeError, AttributeError, KeyError) as e:
-            logger.warning(f"Failed to parse LLM re-ranking: {e}")
+    for index, candidate in enumerate(candidates, 1):
+        if index in ranking_map:
+            llm_score = ranking_map[index].get("score", 6)
+            reasoning = ranking_map[index].get("reasoning", "")
+            match_score = (candidate.get("vector_score", 45) * 0.45) + (llm_score * 10 * 0.55)
+        else:
+            llm_score = round(max(4.5, min(9.7, candidate.get("vector_score", 0) / 11.0)), 1)
+            reasoning = candidate.get("local_reasoning") or _local_reasoning(candidate, query_analysis)
+            graph_bonus = 8.0 if candidate.get("graph_discovered") else 0.0
+            experience_bonus = min(
+                6.0,
+                int(candidate.get("metadata", {}).get("years_experience", 0) or 0) / 4,
+            )
+            match_score = candidate.get("vector_score", 45) + graph_bonus + experience_bonus
 
-    # Ensure all candidates have scores
-    for candidate in candidates:
-        if "match_score" not in candidate:
-            candidate["match_score"] = candidate.get("vector_score", 50)
-        if "llm_score" not in candidate:
-            candidate["llm_score"] = None
-        if "ai_reasoning" not in candidate:
-            candidate["ai_reasoning"] = None
+        candidate["llm_score"] = llm_score
+        candidate["ai_reasoning"] = reasoning
+        candidate["match_score"] = round(max(0.0, min(99.5, match_score)), 2)
 
-    # Sort by match_score descending
-    ranked = sorted(candidates, key=lambda x: x.get("match_score", 0), reverse=True)
-    state["ranked_candidates"] = ranked
+    state["ranked_candidates"] = sorted(
+        candidates,
+        key=lambda candidate: candidate.get("match_score", 0),
+        reverse=True,
+    )
     return state
 
 
+@traceable(name="Summariser")
 def summariser(state: AgentState) -> AgentState:
-    """
-    Node 5: Generate executive summary of top candidates.
 
-    Calls Groq to produce a 150-word executive summary
-    of the top 5 experts and why they're relevant.
-    """
     ranked = state.get("ranked_candidates", [])
     query = state["query"]
 
@@ -424,108 +508,111 @@ def summariser(state: AgentState) -> AgentState:
         state["executive_summary"] = None
         return state
 
-    top_5 = ranked[:5]
-    expert_details = []
-    for i, c in enumerate(top_5, 1):
-        meta = c.get("metadata", {})
-        name = meta.get("name", "Unknown")
-        title = meta.get("title", "N/A")
-        company = meta.get("company", "N/A")
-        score = c.get("match_score", 0)
-        reasoning = c.get("ai_reasoning", "Strong domain match")
-        expert_details.append(
-            f"{i}. {name} ({title}, {company}) — Score: {score}/100 — {reasoning}"
+    if settings.groq_available:
+        top_3 = ranked[:3]
+        expert_details = []
+        for index, candidate in enumerate(top_3, 1):
+            meta = candidate.get("metadata", {})
+            expert_details.append(
+                f"{index}. {meta.get('name', 'Unknown')} ({meta.get('title', 'N/A')}, "
+                f"{meta.get('company', 'N/A')}) - Match Score: {candidate.get('match_score', 0)}/100. "
+                f"Reasoning: {candidate.get('ai_reasoning', 'Strong match')}"
+            )
+
+        summary = _call_groq(
+            f"""You are a research analyst summarizing expert discovery results for a query: "{query}"
+            
+            Here are the top 3 ranked experts:
+            {chr(10).join(expert_details)}
+            
+            Write a professional 100-word executive summary. 
+            - Start by stating how well the top candidates match the query using their actual match scores.
+            - Mention each of the top 3 experts by name and briefly why they are recommended.
+            - Maintain absolute fidelity to the scores provided.
+            - Do not mention experts not listed above.
+            - Use a professional, concise tone. No bullet points.""",
+            max_tokens=400,
         )
+        if summary:
+            state["executive_summary"] = summary
+            return state
 
-    details_text = "\n".join(expert_details)
-
-    summary = _call_groq(
-        f"""Write a 150-word executive summary for a research manager reviewing these expert recommendations.
-
-Research Query: "{query}"
-
-Top Recommended Experts:
-{details_text}
-
-The summary should:
-1. Briefly restate the research need
-2. Highlight why these specific experts are the best matches
-3. Note any complementary expertise across the group
-4. Suggest an optimal engagement strategy (e.g., which expert to consult first)
-
-Write in professional, concise prose. Do not use bullet points. Do not exceed 150 words.""",
-        max_tokens=400,
-    )
-
-    state["executive_summary"] = summary
+    state["executive_summary"] = _local_summary(query, ranked)
     return state
 
 
+@traceable(name="ResponseBuilder")
 def response_builder(state: AgentState) -> AgentState:
-    """
-    Node 6: Format the final response JSON.
 
-    Assembles all pipeline outputs into the SearchResponse schema.
-    """
     ranked = state.get("ranked_candidates", [])
     top_k = state.get("top_k", 10)
 
-    # Build result items
     results = []
     for candidate in ranked[:top_k]:
         meta = candidate.get("metadata", {})
-
-        # Parse topics from metadata
         topics = meta.get("topics", "")
-        if isinstance(topics, str):
-            topics = [t.strip() for t in topics.split(",") if t.strip()]
-
-        # Parse publications
         publications = meta.get("publications", "")
+
+        if isinstance(topics, str):
+            topics = [topic.strip() for topic in topics.split(",") if topic.strip()]
         if isinstance(publications, str):
-            publications = [p.strip() for p in publications.split(";") if p.strip()]
+            publications = [publication.strip() for publication in publications.split(";") if publication.strip()]
 
-        result = {
-            "id": candidate["id"],
-            "name": meta.get("name", "Unknown"),
-            "title": meta.get("title", "N/A"),
-            "company": meta.get("company", "N/A"),
-            "industry": meta.get("industry", "N/A"),
-            "seniority": meta.get("seniority", "N/A"),
-            "bio": meta.get("bio", candidate.get("document", "")[:300]),
-            "topics": topics if isinstance(topics, list) else [],
-            "publications": publications if isinstance(publications, list) else [],
-            "years_experience": int(meta.get("years_experience", 0)),
-            "availability": meta.get("availability", "unknown"),
-            "match_score": round(candidate.get("match_score", 0), 2),
-            "vector_score": round(candidate.get("vector_score", 0), 2),
-            "graph_score": 10.0 if candidate.get("graph_discovered") else 0.0,
-            "llm_score": candidate.get("llm_score"),
-            "ai_reasoning": candidate.get("ai_reasoning"),
-        }
-        results.append(result)
+        results.append(
+            {
+                "id": candidate["id"],
+                "name": meta.get("name", "Unknown"),
+                "title": meta.get("title", "N/A"),
+                "company": meta.get("company", "N/A"),
+                "industry": meta.get("industry", "N/A"),
+                "seniority": meta.get("seniority", "N/A"),
+                "bio": meta.get("bio", candidate.get("document", "")[:300]),
+                "topics": topics if isinstance(topics, list) else [],
+                "publications": publications if isinstance(publications, list) else [],
+                "years_experience": int(meta.get("years_experience", 0)),
+                "availability": meta.get("availability", "unknown"),
+                "match_score": round(candidate.get("match_score", 0), 2),
+                "vector_score": round(candidate.get("vector_score", 0), 2),
+                "graph_score": 10.0 if candidate.get("graph_discovered") else 0.0,
+                "llm_score": candidate.get("llm_score"),
+                "ai_reasoning": candidate.get("ai_reasoning"),
+            }
+        )
 
-    # Build graph visualisation data
-    graph_results = state.get("graph_results", {})
     graph_data = None
-    if graph_results.get("nodes"):
+    if state.get("include_graph", False):
+        nodes = []
+        edges = []
+        for candidate in ranked[:top_k]:
+            meta = candidate.get("metadata", {})
+            expert_id = candidate["id"]
+            name = meta.get("name", "Unknown")
+            industry = meta.get("industry", "Technology")
+            company = meta.get("company", "Independent")
+            topics = meta.get("topics", "")
+            
+            if isinstance(topics, str):
+                topics = [t.strip() for t in topics.split(",") if t.strip()]
+                
+            nodes.append({"id": expert_id, "label": name, "type": "expert"})
+            
+            if industry and industry != "N/A":
+                nodes.append({"id": f"ind_{industry}", "label": industry, "type": "industry"})
+                edges.append({"source": expert_id, "target": f"ind_{industry}", "relationship": "works_in"})
+                
+            if company and company != "N/A":
+                nodes.append({"id": f"comp_{company}", "label": company, "type": "company"})
+                edges.append({"source": expert_id, "target": f"comp_{company}", "relationship": "works_at"})
+                
+            for t in (topics[:3] if isinstance(topics, list) else []):
+                if t:
+                    nodes.append({"id": f"topic_{t}", "label": t, "type": "topic"})
+                    edges.append({"source": expert_id, "target": f"topic_{t}", "relationship": "specializes_in"})
+                    
+        unique_nodes = list({n["id"]: n for n in nodes}.values())
         graph_data = {
-            "nodes": [
-                {
-                    "id": n["id"],
-                    "label": n["label"],
-                    "type": n["type"],
-                }
-                for n in graph_results.get("nodes", [])[:100]  # Limit for frontend
-            ],
-            "edges": [
-                {
-                    "source": e["source"],
-                    "target": e["target"],
-                    "relationship": e["relationship"],
-                }
-                for e in graph_results.get("edges", [])[:200]
-            ],
+            "nodes": unique_nodes[:settings.GRAPH_MAX_RESPONSE_NODES],
+            "edges": edges[:settings.GRAPH_MAX_RESPONSE_EDGES],
         }
 
     state["response"] = {
@@ -536,28 +623,15 @@ def response_builder(state: AgentState) -> AgentState:
         "graph_data": graph_data,
         "query_analysis": state.get("query_analysis"),
         "processing_time_ms": round(
-            (time.time() * 1000) - state.get("_start_time", time.time() * 1000), 2
+            (time.time() * 1000) - state.get("_start_time", time.time() * 1000),
+            2,
         ),
     }
-
     return state
 
 
-# ═══════════════════════════════════════
-# AGENT EXECUTOR
-# ═══════════════════════════════════════
-
-
 class ExpertDiscoveryAgent:
-    """
-    LangGraph-style agent for expert discovery.
-
-    Executes the 6-node pipeline sequentially,
-    passing typed state between nodes.
-    """
-
     def __init__(self) -> None:
-        """Initialise the agent with the node pipeline."""
         self.nodes = [
             ("QueryAnalyser", query_analyser),
             ("VectorSearcher", vector_searcher),
@@ -567,136 +641,116 @@ class ExpertDiscoveryAgent:
             ("ResponseBuilder", response_builder),
         ]
 
+    @traceable(name="ExpertDiscoveryAgent.run")
     def run(
+
         self,
         query: str,
         filters: Optional[Dict[str, Any]] = None,
         top_k: int = 10,
+        include_graph: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Execute the full agent pipeline.
-
-        Args:
-            query: Natural language search query.
-            filters: Optional filters (industry, seniority, availability).
-            top_k: Number of results to return.
-
-        Returns:
-            Complete search response dict.
-        """
         start_time = time.time() * 1000
-
         state: AgentState = {
             "query": query,
             "filters": filters,
             "top_k": top_k,
             "errors": [],
             "_start_time": start_time,
+            "include_graph": include_graph,
         }
 
         for node_name, node_fn in self.nodes:
             try:
-                logger.info(f"Agent executing node: {node_name}")
+                logger.info("Agent executing node: %s", node_name)
                 state = node_fn(state)
-            except Exception as e:
-                error_msg = f"Node {node_name} failed: {str(e)}"
+            except Exception as exc:
+                error_msg = f"Node {node_name} failed: {exc}"
                 logger.error(error_msg, exc_info=True)
                 state.setdefault("errors", []).append(error_msg)
-                # Continue to next node — graceful degradation
-                continue
 
         response = state.get("response", {})
         response["processing_time_ms"] = round(time.time() * 1000 - start_time, 2)
         return response
 
+    @traceable(name="ExpertDiscoveryAgent.stream_run")
     async def stream_run(
+
         self,
         query: str,
         filters: Optional[Dict[str, Any]] = None,
         top_k: int = 10,
+        include_graph: bool = False,
     ):
-        """
-        Execute the agent pipeline and stream the executive summary as SSE.
-        Yields JSON events:
-        - data: {"type": "results", "data": <SearchResponse without summary>}
-        - data: {"type": "chunk", "text": "..."}
-        - data: {"type": "done"}
-        """
         start_time = time.time() * 1000
-
         state: AgentState = {
             "query": query,
             "filters": filters,
             "top_k": top_k,
             "errors": [],
             "_start_time": start_time,
+            "include_graph": include_graph,
         }
 
-        # Run nodes 1-4 (Up to Reranker)
         for node_name, node_fn in self.nodes[:4]:
             try:
                 state = node_fn(state)
-            except Exception as e:
-                error_msg = f"Node {node_name} failed: {str(e)}"
+            except Exception as exc:
+                error_msg = f"Node {node_name} failed: {exc}"
                 logger.error(error_msg, exc_info=True)
                 state.setdefault("errors", []).append(error_msg)
-                
-        # Run ResponseBuilder early without summary
+
         state["executive_summary"] = None
         state = response_builder(state)
-        
+
         response = state.get("response", {})
         response["processing_time_ms"] = round(time.time() * 1000 - start_time, 2)
-        
         yield f"data: {json.dumps({'type': 'results', 'data': response})}\n\n"
 
-        # Now run stream generation derived from Summariser node
         ranked = state.get("ranked_candidates", [])
         if not ranked:
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             return
-            
-        top_5 = ranked[:5]
-        expert_details = []
-        for i, c in enumerate(top_5, 1):
-            meta = c.get("metadata", {})
-            name = meta.get("name", "Unknown")
-            title = meta.get("title", "N/A")
-            company = meta.get("company", "N/A")
-            score = c.get("match_score", 0)
-            reasoning = c.get("ai_reasoning", "Strong domain match")
-            expert_details.append(
-                f"{i}. {name} ({title}, {company}) — Score: {score}/100 — {reasoning}"
-            )
 
-        details_text = "\n".join(expert_details)
-        prompt = f'''Write a 150-word executive summary for a research manager reviewing these expert recommendations.
+        if settings.groq_available:
+            top_5 = ranked[:5]
+            expert_details = []
+            for index, candidate in enumerate(top_5, 1):
+                meta = candidate.get("metadata", {})
+                expert_details.append(
+                    f"{index}. {meta.get('name', 'Unknown')} ({meta.get('title', 'N/A')}, "
+                    f"{meta.get('company', 'N/A')}) - Score: {candidate.get('match_score', 0)}/100 - "
+                    f"{candidate.get('ai_reasoning', 'Strong match')}"
+                )
+
+            prompt = f"""Write a 150-word executive summary for a research manager reviewing these expert recommendations.
 
 Research Query: "{query}"
 
 Top Recommended Experts:
-{details_text}
+{chr(10).join(expert_details)}
 
-The summary should:
-1. Briefly restate the research need
-2. Highlight why these specific experts are the best matches
-3. Note any complementary expertise across the group
-4. Suggest an optimal engagement strategy (e.g., which expert to consult first)
+Write in professional, concise prose. Do not use bullet points. Do not exceed 150 words."""
 
-Write in professional, concise prose. Do not use bullet points. Do not exceed 150 words.'''
+            emitted = False
+            async for chunk in _stream_groq(prompt, max_tokens=400):
+                emitted = True
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+            if emitted:
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return
 
-        async for chunk in _stream_groq(prompt, max_tokens=400):
-            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
-            
+        for chunk in _summary_chunks(_local_summary(query, ranked)):
+            if chunk:
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
-# Singleton
 _agent: Optional[ExpertDiscoveryAgent] = None
 
 
 def get_agent() -> ExpertDiscoveryAgent:
-    """Get or create the singleton agent."""
     global _agent
     if _agent is None:
         _agent = ExpertDiscoveryAgent()

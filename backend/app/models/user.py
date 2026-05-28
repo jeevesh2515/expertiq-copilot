@@ -6,9 +6,10 @@ Stores registered users with bcrypt-hashed passwords.
 
 import uuid
 from datetime import datetime, timezone
+from typing import List, TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -52,6 +53,5 @@ class User(Base):
         return f"<User {self.email}>"
 
 # Import here to avoid circular dependencies during type checking
-from typing import TYPE_CHECKING, List
 if TYPE_CHECKING:
     from app.models.interaction import Bookmark, SearchHistory

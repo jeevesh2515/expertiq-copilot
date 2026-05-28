@@ -36,6 +36,9 @@ async def health_check() -> Dict[str, object]:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "features": {
             "llm_available": settings.groq_available,
-            "embedding_model": settings.EMBEDDING_MODEL,
+            "search_backend": settings.SEARCH_BACKEND,
+            "embedding_model": settings.EMBEDDING_MODEL if settings.groq_available else None,
+            "knowledge_graph_enabled": settings.ENABLE_KNOWLEDGE_GRAPH,
+            "index_prewarm_enabled": settings.PREWARM_LIGHTWEIGHT_INDEX,
         },
     }

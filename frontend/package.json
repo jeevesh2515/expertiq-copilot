@@ -3,22 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "NODE_OPTIONS=--max-old-space-size=768 next dev --hostname 127.0.0.1 --port 3000",
+    "build": "NODE_OPTIONS=--max-old-space-size=1024 next build",
+    "start": "next start --hostname 127.0.0.1 --port 3000",
     "lint": "eslint"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.96.2",
-    "axios": "^1.14.0",
-    "class-variance-authority": "^0.7.1",
+    "@types/three": "^0.184.0",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.7.0",
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-markdown": "^9.1.0",
-    "tailwind-merge": "^3.5.0"
+    "react-force-graph-3d": "^1.29.1",
+    "tailwind-merge": "^3.5.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

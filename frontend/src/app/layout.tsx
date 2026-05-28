@@ -1,14 +1,27 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+  display: "swap",
 });
 
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: "ExpertIQ Copilot — AI Expert Discovery Platform",
+  title: "ExpertIQ Copilot — AI-Powered Expert Discovery Platform",
   description:
     "Discover the right experts for any research query using semantic search, knowledge graphs, and AI-powered re-ranking. Built for expert networks and research teams.",
   keywords: [
@@ -18,11 +31,22 @@ export const metadata: Metadata = {
     "knowledge graph",
     "expert discovery",
     "research intelligence",
+    "AI copilot",
+    "expert matching",
   ],
+  authors: [{ name: "ExpertIQ" }],
+  robots: "index, follow",
   openGraph: {
+    title: "ExpertIQ Copilot — AI Expert Discovery",
+    description:
+      "Three-layer AI retrieval: semantic search, knowledge graphs, and LLM re-ranking to deliver the highest quality expert matches.",
+    type: "website",
+    siteName: "ExpertIQ Copilot",
+  },
+  twitter: {
+    card: "summary_large_image",
     title: "ExpertIQ Copilot",
     description: "AI-Powered Expert Discovery & Research Intelligence",
-    type: "website",
   },
 };
 
@@ -32,8 +56,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased text-stone-900`}>
+    <html lang="en" className="light">
+      <body
+        className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        style={{
+          fontFamily: "var(--font-inter), system-ui, -apple-system, sans-serif",
+        }}
+      >
         {children}
       </body>
     </html>

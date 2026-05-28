@@ -11,7 +11,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class KnowledgeGraph:
@@ -110,10 +113,19 @@ class KnowledgeGraph:
                 industry_topics[industry].add(topic)
 
         # ── Create RELATED_TO edges between topics in the same industry ──
+        # OPTIMISED: Cap cross-links to prevent quadratic edge explosion.
+        # Previously: C(n,2) per industry → 12,000+ edges for 246 topics.
+        # Now: at most MAX_TOPIC_CROSS_LINKS per industry → ~250 total.
+        max_links = settings.MAX_TOPIC_CROSS_LINKS
         for industry, topics in industry_topics.items():
             topic_list = sorted(topics)
+            edge_count = 0
             for i, t1 in enumerate(topic_list):
+                if edge_count >= max_links:
+                    break
                 for t2 in topic_list[i + 1:]:
+                    if edge_count >= max_links:
+                        break
                     self.graph.add_edge(
                         f"topic:{t1}",
                         f"topic:{t2}",
@@ -124,6 +136,7 @@ class KnowledgeGraph:
                         f"topic:{t1}",
                         relationship="RELATED_TO",
                     )
+                    edge_count += 1
 
         logger.info(
             f"Knowledge graph built: {self.graph.number_of_nodes()} nodes, "

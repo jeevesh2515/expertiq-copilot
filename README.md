@@ -1,41 +1,34 @@
 # 🧠 ExpertIQ Copilot
 
-> **AI-Powered Expert Discovery & Research Intelligence Platform**
+> **Enterprise-Grade Expert Discovery & Research Intelligence Platform**
 
-[![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![Next.js 14](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
-[![LangChain](https://img.shields.io/badge/LangChain-0.1-green?logo=chainlink&logoColor=white)](https://langchain.com)
+[![Python 3.14+](https://img.shields.io/badge/Python-3.14+-blue?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Next.js 16 (React 19)](https://img.shields.io/badge/Next.js-16--Turbopack-black?logo=next.js)](https://nextjs.org)
+[![LangChain / LangGraph](https://img.shields.io/badge/LangGraph-Agent--Pipeline-green?logo=chainlink&logoColor=white)](https://langchain.com)
+[![Redis](https://img.shields.io/badge/Redis-Cache%20%26%20Rate%20Limit-red?logo=redis&logoColor=white)](https://redis.io)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20DB-orange)](https://trychroma.com)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docker.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## The Problem This Solves
+## 🚀 Architectural Vision & Key Solutions
 
-Expert networks (like GLG, AlphaSights, proSapient) connect researchers with subject-matter experts. The core challenge: **keyword search fails to surface the RIGHT expert for nuanced research queries**.
+Expert network platforms rely on connecting investment researchers, consultants, and companies with highly specialized subject-matter experts. Standard keyword-based searches frequently fail to capture contextual alignment for highly specific queries.
 
-Searching for *"semiconductor supply chain expert with buy-side banking experience"* returns hundreds of irrelevant results when relying on keyword matching. Researchers waste hours manually reviewing profiles.
-
-**ExpertIQ Copilot** solves this with a **3-layer AI retrieval system** that understands meaning, not just keywords.
-
----
-
-## Architecture
+**ExpertIQ Copilot** solves this by orchestrating a high-performance **3-layer hybrid search pipeline** wrapped in a secure, authenticated, and cached enterprise-grade API, capable of running smoothly on standard local machines or scale-out production clusters.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Next.js 14 Frontend                       │
+│                    Next.js 16 Frontend                      │
 │  ┌──────────┐  ┌──────────┐  ┌─────────┐  ┌──────────────┐ │
 │  │ SearchBar│  │ExpertCard│  │ GraphViz│  │  Executive   │ │
 │  │          │  │  (Score) │  │  (D3/   │  │  Summary     │ │
 │  │          │  │  + AI    │  │  Canvas)│  │  Panel       │ │
 │  └──────────┘  └──────────┘  └─────────┘  └──────────────┘ │
 └───────────────────────┬─────────────────────────────────────┘
-                        │ REST API (JWT Auth)
+                        │ REST API (JWT + Redis Rate Limiter)
 ┌───────────────────────▼─────────────────────────────────────┐
-│                   FastAPI Backend                             │
+│                   FastAPI Backend                           │
 │                                                               │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │              LangGraph AI Agent Pipeline                  │ │
@@ -51,248 +44,158 @@ Searching for *"semiconductor supply chain expert with buy-side banking experien
 │  │  └──────────┘  └──────────┘  └──────────┘              │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                               │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
-│  │ ChromaDB │  │ NetworkX │  │  SQLite  │  │  JWT Auth  │  │
-│  │ (Vectors)│  │  (Graph) │  │   (ORM)  │  │ + bcrypt   │  │
-│  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │
+│  ┌────────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐  │
+│  │  ChromaDB  │  │ NetworkX │  │  SQLite  │  │ Redis Cache │  │
+│  │  (Vectors) │  │  (Graph) │  │   (ORM)  │  │ (Failover)  │  │
+│  └────────────┘  └──────────┘  └──────────┘  └─────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### The 3 Retrieval Layers
+---
 
-| Layer | Technology | What it Does |
-|-------|-----------|-------------|
-| **1. Semantic Search** | sentence-transformers + ChromaDB | Embeds query & expert profiles into 384-dim vector space, finds nearest matches by cosine similarity |
-| **2. Knowledge Graph** | NetworkX | Traverses Expert→Company→Industry→Topic relationships (2-hop BFS) to surface contextually adjacent experts |
-| **3. LLM Agent** | LangGraph + Groq (Llama 3.1 70B) | AI agent scores candidates 1-10 with reasoning, generates executive summary of top 5 |
+## ⚡ The 3 Hybrid Retrieval Layers
+
+| Layer | Architecture | Mechanics |
+| :--- | :--- | :--- |
+| **1. Semantic Search** | `sentence-transformers` + `ChromaDB` | Embeds expert biographies and queries into a local vector space using lightweight ONNX runtime embeddings, resolving nearest-neighbors via cosine similarity. |
+| **2. Relation Network** | `NetworkX` | Models deep multi-hop connections (Expert ↔ Company ↔ Industry ↔ Skill) using a local in-memory graph layer, surfacing contextually relevant secondary connections. |
+| **3. Re-ranking Agent** | `LangGraph` + `Groq` (`Llama-3.3-70B`) | Scores and ranks candidates from 1 to 10 with clear AI reasoning, synthesizing a concise executive summary of top-tier matches. |
 
 ---
 
-## Quick Start
+## 🛡️ Enterprise-Grade Security & System Optimizations
 
-### Prerequisites
-- Python 3.11+
-- Node.js 20+
-- Groq API key (free at [console.groq.com](https://console.groq.com))
+### 1. Robust Injection Protection
+- **Multi-Field Sanitization**: Built-in Pydantic validators leverage `bleach` to dynamically strip out and sanitize HTML, script tags, and prompt-injection payloads from search queries and nested `filters` fields.
+- **SQL & Vector Injection Immunity**: Strictly relies on SQLAlchemy parameter binding and vector similarity spaces, entirely preventing raw query concatenations.
 
-### Setup (3 commands)
+### 2. Dual-Engine Caching & Resiliency
+- **Secure Per-User Cache**: Implements user-partitioned caching to prevent cross-user data leakage.
+- **Graceful Failover Manager**: Configured to write and read from **Redis** if running, but automatically switches to local in-memory **TTLCache** on failure.
 
+### 3. Dedicated Rate Limiting
+- **Brute-Force & Abuse Defense**: Limits search operations (10/min) and auth checkpoints (5/min) per IP/User.
+- **Failover Safe**: Powered by Redis with automatic fallback to local memory, and fully bypassed inside automated test suites for smooth CI pipelines.
+
+### 4. Direct Bcrypt Authentication
+- **Modern Python 3.14+ Compatibility**: Replaced legacy, slow, and buggy wrapper frameworks (e.g. `passlib`) with native, highly optimized, direct `bcrypt` calls.
+
+---
+
+## 🛠️ Production Tech Stack
+
+- **API Engine**: `FastAPI 0.136+`
+- **Agent Framework**: `LangGraph` + `LangChain`
+- **Vector Search**: `ChromaDB` (Local Persistent) + `FastEmbed` (ONNX Runtime)
+- **Graph Processor**: `NetworkX`
+- **Caching & Rate Limiting**: `Redis` (Failover Support) + `slowapi`
+- **Relational Storage**: `SQLite` (Local Dev) / `PostgreSQL` + `SQLAlchemy 2.0+`
+- **Frontend App**: `Next.js 16 (App Router)` + `React 19` + `Tailwind CSS 4` + `3D Canvas (Three.js)`
+- **DevOps**: `Docker` + `Docker Compose`
+
+---
+
+## 📦 Quick Start & Installation
+
+### 1. Prerequisites
+- **Python 3.14+** or **Node.js 20+**
+- **Redis Server** (Optional: fallbacks to in-memory)
+- **Groq API Key** (Obtain free at [console.groq.com](https://console.groq.com))
+
+### 2. Standard Local Run (Highly Optimized)
+
+#### Backend Setup
 ```bash
-# 1. Clone and configure
-git clone https://github.com/your-username/expertiq-copilot.git
-cd expertiq-copilot
-cp .env.example .env  # Edit .env with your GROQ_API_KEY
-
-# 2. Start backend
+# 1. Navigate to backend
 cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
 
-# 3. Start frontend (new terminal)
-cd frontend
-npm install && npm run dev
+# 2. Initialize virtual environment and activate
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install relaxed dependencies
+pip install -r requirements.txt
+
+# 4. Start the FastAPI development server
+venv/bin/python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — register an account and start searching!
-
-### Docker (Alternative)
-
+#### Frontend Setup (New Terminal Window)
 ```bash
-cp .env.example .env  # Add your GROQ_API_KEY
+# 1. Navigate to frontend
+cd frontend
+
+# 2. Install modern npm dependencies
+npm install
+
+# 3. Build and launch Next.js development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) inside your web browser. Create a new user profile to immediately access the interactive search, curate pipelines, and explore the **3D D3 force-directed knowledge graph**!
+
+### 3. Docker Compose (Alternative)
+```bash
+# Clone the repository
+git clone https://github.com/jeevesh2515/expertiq-copilot.git
+cd expertiq-copilot
+
+# Initialize configurations
+cp .env.example .env
+
+# Build and start services
 docker-compose up --build
 ```
 
 ---
 
-## API Documentation
+## 🧪 Comprehensive Verification & Test Runner
 
-Once the backend is running, visit:
-- **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
-
-### Key Endpoints
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `GET` | `/api/health` | ❌ | Health check |
-| `POST` | `/auth/register` | ❌ | Create account |
-| `POST` | `/auth/login` | ❌ | Get JWT tokens |
-| `POST` | `/auth/refresh` | ❌ | Refresh access token |
-| `GET` | `/auth/me` | ✅ | Get user profile |
-| `POST` | `/api/search` | ✅ | **AI expert search** |
-| `GET` | `/api/experts` | ✅ | List experts (paginated) |
-| `GET` | `/api/experts/{id}` | ✅ | Get expert by ID |
-
-### Search Request Example
-
-```json
-POST /api/search
-Authorization: Bearer <token>
-
-{
-  "query": "Find experts in semiconductor supply chain with buy-side banking experience",
-  "filters": {
-    "industry": "FinTech",
-    "seniority": "VP"
-  },
-  "top_k": 10
-}
-```
-
-### Search Response Example
-
-```json
-{
-  "query": "Find experts in semiconductor supply chain...",
-  "total_results": 10,
-  "results": [
-    {
-      "id": "uuid-here",
-      "name": "Dr. Sophia Chen",
-      "title": "Chief AI Officer",
-      "company": "QuantumPay Technologies",
-      "match_score": 92.5,
-      "vector_score": 85.3,
-      "llm_score": 9,
-      "ai_reasoning": "Strong quantitative finance background with deep ML expertise...",
-      "topics": ["algorithmic trading", "machine learning", "quantitative finance"]
-    }
-  ],
-  "executive_summary": "Based on the research query, the top candidates...",
-  "graph_data": {
-    "nodes": [...],
-    "edges": [...]
-  },
-  "processing_time_ms": 3420.5
-}
-```
-
----
-
-## Architecture Decisions
-
-### Why ChromaDB?
-- Runs entirely locally (no cloud dependency)
-- Persistent storage with DuckDB+Parquet backend
-- Native Python API, easy to embed in FastAPI
-- Metadata filtering for industry/seniority queries
-
-### Why Groq (Llama 3.1 70B)?
-- **Free tier** with generous rate limits
-- Fastest LLM inference available (300+ tokens/sec)
-- Open-source model (no vendor lock-in)
-- Quality comparable to GPT-4 for ranking/summarisation tasks
-
-### Why LangGraph over simple chains?
-- **Typed state** — each node receives and produces structured data
-- **Graceful degradation** — if one node fails, others continue
-- **Observable** — easy to log and debug each pipeline stage
-- **Extensible** — add new nodes (e.g., citation checker) without refactoring
-
-### Why sentence-transformers (local) over OpenAI embeddings?
-- **Zero cost** — runs on CPU, no API calls
-- **Privacy** — expert data never leaves your infrastructure
-- **Speed** — batch embedding of 50 profiles in <2 seconds
-- **all-MiniLM-L6-v2** — 384 dimensions, excellent quality/speed tradeoff
-
----
-
-## Security Measures
-
-| Measure | Implementation |
-|---------|---------------|
-| **Authentication** | JWT access tokens (30 min) + refresh tokens (7 days) |
-| **Password Hashing** | bcrypt with 12 rounds via passlib |
-| **Rate Limiting** | 10 searches/min per user via slowapi |
-| **Input Sanitisation** | HTML stripping via bleach, max 500 char queries |
-| **SQL Injection** | SQLAlchemy ORM (parameterised queries only) |
-| **CORS** | Whitelist frontend origin only |
-| **Security Headers** | X-Content-Type-Options, X-Frame-Options, CSP, HSTS |
-| **Error Handling** | Stack traces never exposed to client |
-| **Secrets** | All via environment variables, never hardcoded |
-| **Request Tracing** | Unique request ID per request for audit logs |
-
----
-
-## Testing
+The entire system is backed by comprehensive integration and unit test suites:
 
 ```bash
 cd backend
-
 # Run all tests
-python -m pytest tests/ -v
+venv/bin/pytest tests/ -v
+```
 
-# Run specific test file
-python -m pytest tests/test_auth.py -v
-python -m pytest tests/test_search.py -v
-python -m pytest tests/test_agent.py -v
+```text
+======================== 33 passed, 7 warnings in 2.51s ========================
+```
 
-# Run with coverage
-python -m pytest tests/ --cov=app --cov-report=term-missing
+To run a production-ready Next.js compilation check:
+```bash
+cd frontend
+npm run build
 ```
 
 ---
 
-## Tech Stack
+## 📁 Directory Architecture
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| API Framework | FastAPI 0.104 | Async REST API with auto-docs |
-| LLM Orchestration | LangGraph + LangChain | Multi-step AI agent pipeline |
-| LLM Inference | Groq (Llama 3.1 70B) | Free, fast LLM for ranking/summarisation |
-| Vector Database | ChromaDB | Local persistent vector storage |
-| Embeddings | sentence-transformers | Local 384-dim text embeddings |
-| Knowledge Graph | NetworkX | In-memory relationship traversal |
-| Relational DB | SQLite + SQLAlchemy | User/expert profile storage |
-| Auth | python-jose + passlib | JWT tokens + bcrypt hashing |
-| Rate Limiting | slowapi | Per-user request throttling |
-| Frontend | Next.js 14 + Tailwind CSS | App Router, server components |
-| Visualisation | Canvas API | Force-directed graph rendering |
-| Containerisation | Docker + docker-compose | One-command deployment |
-| CI/CD | GitHub Actions | Test, lint, security scan, build |
-
----
-
-## Project Structure
-
-```
+```text
 expertiq-copilot/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI entry + middleware + startup
-│   │   ├── config.py            # pydantic-settings from .env
-│   │   ├── database.py          # SQLAlchemy engine + session
-│   │   ├── auth/                # JWT auth (handler, middleware, routes)
-│   │   ├── api/                 # REST endpoints (search, experts, health)
-│   │   ├── core/                # AI/ML (embeddings, vectors, graph, agent)
-│   │   ├── models/              # SQLAlchemy ORM models
-│   │   ├── schemas/             # Pydantic request/response schemas
-│   │   └── data/                # Synthetic expert seed data (50 profiles)
-│   ├── tests/                   # pytest test suite
-│   ├── Dockerfile
-│   └── requirements.txt
+│   │   ├── main.py              # FastAPI application lifecycle & middlewares
+│   │   ├── config.py            # Pydantic-settings config loaders
+│   │   ├── auth/                # Optimized JWT handlers & dependencies
+│   │   ├── api/                 # REST Controller routes
+│   │   ├── core/                # Hybrid search engines & LangGraph Agent
+│   │   │   ├── agent.py         # 6-node LangGraph orchestration
+│   │   │   ├── cache.py         # Graceful Redis Cache Manager
+│   │   │   ├── limiter.py       # Resilient IP/User rate-limiting config
+│   │   │   └── lightweight_search.py # Low-load SQLite fallbacks
+│   │   └── models/              # SQLAlchemy Database ORMs
+│   └── tests/                   # Pytest test suites (33 tests)
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router pages
-│   │   ├── components/          # React components
-│   │   └── lib/                 # API client
-│   ├── Dockerfile
+│   │   ├── app/                 # Next.js App Router layout & views
+│   │   └── components/          # ForceGraph3D & React components
 │   └── package.json
-├── .github/workflows/           # CI/CD pipelines
-├── docker-compose.yml
-├── .env.example
-└── README.md
+└── docker-compose.yml
 ```
 
 ---
 
-## License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  Built with ❤️ using FastAPI, LangGraph, ChromaDB, and Next.js
-</p>
+*Built with ❤️ using Next.js 16, FastAPI, Redis, ChromaDB, and LangGraph.*

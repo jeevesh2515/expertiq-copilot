@@ -4,7 +4,8 @@ Lightweight local search engine for expert discovery.
 This module replaces the heavyweight embedding/vector-store startup path
 with a zero-download, zero-ML-index fallback that runs comfortably on a
 typical laptop. It keeps the same search contract used by the API while
-using deterministic token and phrase scoring over the local SQLite data.
+using deterministic token and phrase scoring over the local PostgreSQL data.
+
 
 No network calls, no ML models — pure in-memory text scoring.
 """

@@ -45,7 +45,7 @@ Expert network platforms rely on connecting investment researchers, consultants,
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                               │
 │  ┌────────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐  │
-│  │  ChromaDB  │  │ NetworkX │  │  SQLite  │  │ Redis Cache │  │
+│  │  ChromaDB  │  │ NetworkX │  │PostgreSQL│  │ Redis Cache │  │
 │  │  (Vectors) │  │  (Graph) │  │   (ORM)  │  │ (Failover)  │  │
 │  └────────────┘  └──────────┘  └──────────┘  └─────────────┘  │
 └──────────────────────────────────────────────────────────────┘
@@ -108,7 +108,7 @@ Below is the trace tree showing precise latency, query inputs, and success statu
 - **Vector Search**: `ChromaDB` (Local Persistent) + `FastEmbed` (ONNX Runtime)
 - **Graph Processor**: `NetworkX`
 - **Caching & Rate Limiting**: `Redis` (Failover Support) + `slowapi`
-- **Relational Storage**: `SQLite` (Local Dev) / `PostgreSQL` + `SQLAlchemy 2.0+`
+- **Relational Storage**: `PostgreSQL` + `SQLAlchemy 2.0+`
 - **Frontend App**: `Next.js 16 (App Router)` + `React 19` + `Tailwind CSS 4` + `3D Canvas (Three.js)`
 - **DevOps**: `Docker` + `Docker Compose`
 
@@ -204,7 +204,7 @@ expertiq-copilot/
 │   │   │   ├── agent.py         # 6-node LangGraph orchestration
 │   │   │   ├── cache.py         # Graceful Redis Cache Manager
 │   │   │   ├── limiter.py       # Resilient IP/User rate-limiting config
-│   │   │   └── lightweight_search.py # Low-load SQLite fallbacks
+│   │   │   └── lightweight_search.py # Low-load PostgreSQL search engine
 │   │   └── models/              # SQLAlchemy Database ORMs
 │   └── tests/                   # Pytest test suites (33 tests)
 ├── frontend/

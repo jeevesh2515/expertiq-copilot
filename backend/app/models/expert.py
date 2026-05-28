@@ -2,7 +2,8 @@
 Expert ORM model for the relational database.
 
 Stores expert profile data. Topics and publications are stored
-as JSON-serialised strings in SQLite. The vector embeddings
+as JSON-serialised strings in PostgreSQL. The vector embeddings
+
 live in ChromaDB separately.
 """
 
@@ -18,7 +19,8 @@ from app.database import Base
 
 
 class Expert(Base):
-    """Expert profile stored in SQLite."""
+    """Expert profile stored in PostgreSQL."""
+
 
     __tablename__ = "experts"
 

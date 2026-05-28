@@ -1,11 +1,11 @@
 """
 SQLAlchemy database engine and session management.
 
-Uses SQLite for simplicity. The session factory provides
+Uses PostgreSQL. The session factory provides
 request-scoped database sessions via FastAPI dependency injection.
 """
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -19,26 +19,13 @@ db_url = settings.DATABASE_URL
 if "pytest" in sys.modules and db_url == "postgresql://postgres:CHANGE_ME@localhost:5432/expertiq":
     db_url = "postgresql://postgres@localhost:5432/expertiq"
 
-# SQLite needs check_same_thread=False for FastAPI's async context
-connect_args = {}
-if db_url.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
-
 engine = create_engine(
     db_url,
-    connect_args=connect_args,
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=3600,
     echo=False,
 )
-
-# Enable WAL mode for SQLite (better concurrent read performance)
-if db_url.startswith("sqlite"):
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, _connection_record):
-        """Enable WAL mode and foreign keys for SQLite."""
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
 
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

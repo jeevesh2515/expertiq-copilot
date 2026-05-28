@@ -53,3 +53,7 @@ pytest>=7.4.4
 
 # Logging
 structlog>=24.1.0
+
+# Tracing / Observability
+langsmith>=0.1.59
+

@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, TypedDict
 
 from app.config import get_settings
 from app.core.lightweight_search import get_lightweight_search_engine
+from langsmith import traceable
+
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -200,7 +202,9 @@ def _summary_chunks(summary: str, chunk_size: int = 120) -> List[str]:
     return [summary[i:i + chunk_size] for i in range(0, len(summary), chunk_size)] or [summary]
 
 
+@traceable(name="QueryAnalyser")
 def query_analyser(state: AgentState) -> AgentState:
+
     query = state["query"]
     words = _tokenise_query(query)
 
@@ -299,7 +303,9 @@ Return ONLY valid JSON, no other text.""",
     return state
 
 
+@traceable(name="VectorSearcher")
 def vector_searcher(state: AgentState) -> AgentState:
+
     query = state["query"]
     top_k = max(state.get("top_k", 20) * 2, 12)
     filters = state.get("filters")
@@ -330,7 +336,9 @@ def vector_searcher(state: AgentState) -> AgentState:
     return state
 
 
+@traceable(name="GraphExpander")
 def graph_expander(state: AgentState) -> AgentState:
+
     if not settings.ENABLE_KNOWLEDGE_GRAPH or not state.get("include_graph", False):
         state["graph_results"] = {"expert_ids": [], "nodes": [], "edges": []}
         state["graph_expert_ids"] = []
@@ -418,7 +426,9 @@ def _stringify_candidate_document(expert: Dict[str, Any]) -> str:
     )
 
 
+@traceable(name="Reranker")
 def reranker(state: AgentState) -> AgentState:
+
     candidates = state.get("candidates", [])
     query = state["query"]
     query_analysis = state.get("query_analysis", {})
@@ -488,7 +498,9 @@ Return ONLY valid JSON.""",
     return state
 
 
+@traceable(name="Summariser")
 def summariser(state: AgentState) -> AgentState:
+
     ranked = state.get("ranked_candidates", [])
     query = state["query"]
 
@@ -529,7 +541,9 @@ def summariser(state: AgentState) -> AgentState:
     return state
 
 
+@traceable(name="ResponseBuilder")
 def response_builder(state: AgentState) -> AgentState:
+
     ranked = state.get("ranked_candidates", [])
     top_k = state.get("top_k", 10)
 
@@ -627,7 +641,9 @@ class ExpertDiscoveryAgent:
             ("ResponseBuilder", response_builder),
         ]
 
+    @traceable(name="ExpertDiscoveryAgent.run")
     def run(
+
         self,
         query: str,
         filters: Optional[Dict[str, Any]] = None,
@@ -657,7 +673,9 @@ class ExpertDiscoveryAgent:
         response["processing_time_ms"] = round(time.time() * 1000 - start_time, 2)
         return response
 
+    @traceable(name="ExpertDiscoveryAgent.stream_run")
     async def stream_run(
+
         self,
         query: str,
         filters: Optional[Dict[str, Any]] = None,

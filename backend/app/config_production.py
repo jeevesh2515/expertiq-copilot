@@ -63,6 +63,8 @@ class ProductionSettings(BaseSettings):
     class Config:
         env_file = ".env.production"
         case_sensitive = True
+        extra = "ignore"
+
 
 
 def get_production_settings() -> ProductionSettings:

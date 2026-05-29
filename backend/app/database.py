@@ -14,17 +14,28 @@ import sys
 settings = get_settings()
 
 db_url = settings.DATABASE_URL
-# During automated pytest sessions, if the default CHANGE_ME template is active,
-# we fall back to standard local passwordless credentials to run tests securely.
-if "pytest" in sys.modules and db_url == "postgresql://postgres:CHANGE_ME@localhost:5432/expertiq":
-    db_url = "postgresql://postgres@localhost:5432/expertiq"
+# During automated pytest sessions, we isolate testing on an in-memory SQLite database
+# to prevent tests from wiping or dropping the active development PostgreSQL tables.
+if "pytest" in sys.modules:
+    db_url = "sqlite:///expertiq_test.db"
+
+connect_args = {}
+engine_kwargs = {
+    "echo": False,
+}
+
+if db_url.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+else:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_recycle"] = 3600
+    engine_kwargs["pool_pre_ping"] = True
 
 engine = create_engine(
     db_url,
-    pool_size=10,
-    max_overflow=20,
-    pool_recycle=3600,
-    echo=False,
+    connect_args=connect_args,
+    **engine_kwargs
 )
 
 

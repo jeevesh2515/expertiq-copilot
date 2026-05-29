@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 2. Seed experts
     db = SessionLocal()
+    experts = []
     try:
         expert_count = db.query(Expert).count()
         if expert_count == 0:
@@ -73,6 +74,41 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info(f"✓ Seeded {count} expert profiles.")
         else:
             logger.info(f"✓ Found {expert_count} existing experts.")
+
+        # 2b. Seed demo + admin users from env vars (idempotent)
+        from app.models.user import User
+        from app.auth.routes import pwd_context
+
+        seed_users = []
+        if settings.SEED_DEMO_EMAIL and settings.SEED_DEMO_PASSWORD:
+            seed_users.append({
+                "email": settings.SEED_DEMO_EMAIL,
+                "password": settings.SEED_DEMO_PASSWORD,
+                "full_name": settings.SEED_DEMO_NAME,
+                "is_admin": False,
+            })
+        if settings.SEED_ADMIN_EMAIL and settings.SEED_ADMIN_PASSWORD:
+            seed_users.append({
+                "email": settings.SEED_ADMIN_EMAIL,
+                "password": settings.SEED_ADMIN_PASSWORD,
+                "full_name": settings.SEED_ADMIN_NAME,
+                "is_admin": True,
+            })
+        for u in seed_users:
+            existing = db.query(User).filter(User.email == u["email"]).first()
+            if not existing:
+                new_user = User(
+                    email=u["email"],
+                    hashed_password=pwd_context.hash(u["password"]),
+                    full_name=u["full_name"],
+                    is_admin=u["is_admin"],
+                )
+                db.add(new_user)
+                db.commit()
+                role = "admin" if u["is_admin"] else "demo"
+                logger.info(f"✓ Seeded {role} user: {u['email']}")
+            else:
+                logger.info(f"✓ Found existing user: {u['email']}")
 
         if settings.SEARCH_BACKEND == "pro":
             try:
@@ -102,7 +138,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             try:
                 from app.core.knowledge_graph import get_knowledge_graph
                 kg = get_knowledge_graph()
-                if experts is None:
+                if not experts:
                     experts = db.query(Expert).all()
                 expert_dicts = [e.to_dict() for e in experts]
                 kg.build_from_experts(expert_dicts)
@@ -137,8 +173,8 @@ app = FastAPI(
     ),
     version=settings.APP_VERSION,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if not settings.is_production else None,
+    redoc_url="/redoc" if not settings.is_production else None,
 )
 
 # ── Rate Limiting ──

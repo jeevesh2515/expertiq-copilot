@@ -12,7 +12,7 @@ Tracks:
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ class ProductionMonitoring:
 
 
 # Global monitoring instance
-_monitoring: ProductionMonitoring = None
+_monitoring: Optional[ProductionMonitoring] = None
 
 
 def get_monitoring() -> ProductionMonitoring:

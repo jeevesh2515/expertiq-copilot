@@ -5,24 +5,15 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   Brain,
-  ChevronRight,
-  Cpu,
-  Database,
   Eye,
   EyeOff,
   Globe,
-  Layers,
-  Lock,
-  LogIn,
   Network,
   Search,
   Shield,
   Sparkles,
-  UserPlus,
   X,
-  Zap,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import SearchBar from "@/components/SearchBar";
@@ -37,11 +28,11 @@ import {
 
 type AuthMode = "login" | "register" | null;
 const ExecutiveSummary = dynamic(() => import("@/components/ExecutiveSummary"));
-const Vector3DGraph = dynamic(() => import("@/components/Vector3DGraph"));
-const KnowledgeGraphViz = dynamic(() => import("@/components/KnowledgeGraphViz"));
+const Vector3DGraph = dynamic(() => import("@/components/Vector3DGraph"), { ssr: false });
+const KnowledgeGraphViz = dynamic(() => import("@/components/KnowledgeGraphViz"), { ssr: false });
 
 export default function HomePage() {
-  const docsHref = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`;
+
   const [authMode, setAuthMode] = useState<AuthMode>(null);
   const [authed, setAuthed] = useState(false);
   const [email, setEmail] = useState("");
@@ -54,6 +45,7 @@ export default function HomePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [selectedExpertId, setSelectedExpertId] = useState<string | null>(null);
+  const [resultsTab, setResultsTab] = useState<"list" | "graph2d" | "graph3d">("list");
 
   useEffect(() => { setAuthed(isAuthenticated()); }, []);
 
@@ -91,6 +83,7 @@ export default function HomePage() {
     setSearchError("");
     setSearchResults(null);
     setSelectedExpertId(null);
+    setResultsTab("list");
     try {
       const response = await searchExperts({ query, filters, top_k: 8, include_graph: true });
       setSearchResults(response);
@@ -114,7 +107,8 @@ export default function HomePage() {
   );
 
   return (
-    <div className="min-h-screen font-sans relative">
+    <div className="min-h-screen font-sans relative flex flex-col">
+      {/* Decorative Orbs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="orb orb-1" style={{ top: "-10%", left: "10%" }} />
         <div className="orb orb-2" style={{ top: "40%", right: "-5%" }} />
@@ -186,169 +180,297 @@ export default function HomePage() {
         </div>
       )}
 
-      <header className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800 px-8 py-4">
-        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
+      {/* Dynamic Glass Navbar (Floating on Hero, Solid Header on Results) */}
+      <div className={cn(
+        "w-full flex justify-center sticky z-40 transition-all duration-300",
+        searchResults || searchLoading
+          ? "top-0 px-0"
+          : "top-4 px-4"
+      )}>
+        <header className={cn(
+          "w-full flex items-center justify-between transition-all duration-300",
+          searchResults || searchLoading
+            ? "border-b border-zinc-900 bg-zinc-950/95 backdrop-blur-md px-6 sm:px-8 py-4 shadow-lg"
+            : "max-w-[1200px] rounded-2xl border border-zinc-800/60 bg-zinc-950/70 backdrop-blur-xl px-6 py-3.5 shadow-2xl shadow-black/40"
+        )}>
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.location.reload()}>
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-red-500 flex items-center justify-center shadow-lg shadow-red-500/20">
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div className="flex flex-col">
-              <h1 className="text-[22px] font-bold tracking-tight text-zinc-100 leading-none">ExpertIQ</h1>
-              <span className="text-[10px] font-semibold text-zinc-500 tracking-widest mt-0.5">COPILOT</span>
+              <h1 className="text-[20px] font-bold tracking-tight text-zinc-100 leading-none">ExpertIQ</h1>
+              <span className="text-[9px] font-bold text-zinc-500 tracking-widest mt-0.5">COPILOT</span>
             </div>
           </div>
 
           <nav className="flex items-center gap-8">
             {authed ? (
               <>
-                <Link href="/dashboard" className="text-[15px] font-medium text-zinc-400 hover:text-zinc-100 transition-colors">
+                <Link href="/dashboard" className="text-[14px] font-semibold text-zinc-400 hover:text-zinc-100 transition-colors">
                   Dashboard
                 </Link>
-                <button onClick={handleLogout} className="text-[15px] font-medium text-zinc-400 hover:text-red-400 transition-colors">Sign Out</button>
+                <button onClick={handleLogout} className="text-[14px] font-semibold text-zinc-400 hover:text-red-400 transition-colors cursor-pointer">Sign Out</button>
               </>
             ) : (
               <>
-                <button onClick={() => setAuthMode("login")} className="text-[15px] font-medium text-zinc-400 hover:text-zinc-100 transition-colors">Features</button>
-                <button onClick={() => setAuthMode("login")} className="text-[15px] font-medium text-zinc-400 hover:text-zinc-100 transition-colors">Demo</button>
-                <button onClick={() => setAuthMode("register")} className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-full text-[15px] font-medium transition-all duration-200 ml-4 shadow-lg shadow-red-500/20">Get Started</button>
+                <button onClick={() => setAuthMode("login")} className="text-[14px] font-semibold text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">Features</button>
+                <button onClick={() => setAuthMode("login")} className="text-[14px] font-semibold text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer">Demo</button>
+                <button onClick={() => setAuthMode("register")} className="px-5 py-2 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-full text-[14px] font-semibold transition-all duration-200 ml-4 shadow-lg shadow-red-500/20 cursor-pointer">Get Started</button>
               </>
             )}
           </nav>
-        </div>
-      </header>
+        </header>
+      </div>
 
-      {!searchResults && !searchLoading && (
-        <section className="relative pt-24 pb-12 px-6 overflow-hidden">
-          <div className="max-w-[1000px] mx-auto text-center relative z-10">
-            <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-red-500/10 text-red-400 text-xs font-semibold mb-8 border border-red-500/20">
-              <Sparkles className="w-3 h-3 mr-1.5" />
-              AI-Powered Expert Discovery Platform
+      {/* Main Page Area */}
+      <main className="flex-grow flex flex-col w-full items-center justify-start">
+        {!searchResults && !searchLoading && (
+          <section className="relative pt-36 pb-24 px-6 overflow-hidden w-full flex flex-col items-center justify-center text-center">
+            <div className="max-w-[1200px] mx-auto text-center relative z-10 flex flex-col items-center justify-center w-full">
+              <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-red-500/10 text-red-400 text-xs font-semibold mb-8 border border-red-500/20 shadow-sm backdrop-blur-sm">
+                <Sparkles className="w-3.5 h-3.5 mr-1.5 animate-pulse-soft" />
+                AI-Powered Expert Discovery Platform
+              </div>
+              <h2 className="text-[56px] sm:text-[68px] lg:text-[80px] font-extrabold text-zinc-100 mb-6 tracking-tighter leading-[1.04] text-center">
+                Find the <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-amber-400">perfect expert</span><br />
+                for any research query
+              </h2>
+              <p className="text-[18px] sm:text-[20px] text-zinc-400 font-medium max-w-[720px] mx-auto mb-14 leading-relaxed text-center">
+                Three-layer AI retrieval — semantic search, knowledge graph traversal, and LLM-powered re-ranking — to surface the most relevant experts, not just keyword matches.
+              </p>
             </div>
-            <h2 className="text-[64px] sm:text-[76px] lg:text-[88px] font-extrabold text-zinc-100 mb-6 tracking-tighter leading-[1.02]">
-              Find the <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-amber-400">perfect expert</span><br />
-              for any research query
-            </h2>
-            <p className="text-[20px] text-zinc-400 font-medium max-w-[760px] mx-auto mb-12 leading-relaxed">
-              Three-layer AI retrieval — semantic search, knowledge graph traversal, and LLM-powered re-ranking — to surface the most relevant experts, not just keyword matches.
-            </p>
-          </div>
 
-          <div className="relative z-20 max-w-[900px] mx-auto">
-            <DiscoveryHUD />
-            <SearchBar onSearch={handleSearch} isLoading={searchLoading} />
-          </div>
-        </section>
-      )}
-
-      {(searchResults || searchLoading) && (
-        <section className="px-4 sm:px-6 pt-6 sm:pt-8 relative z-20 bg-zinc-950/80 backdrop-blur-sm border-b border-zinc-800">
-          <div className="max-w-[900px] mx-auto">
-            <SearchBar onSearch={handleSearch} isLoading={searchLoading} />
-          </div>
-        </section>
-      )}
-
-      {searchError && (
-        <div className="max-w-[800px] mx-auto px-4 sm:px-6 mt-6 relative z-10">
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-sm text-red-400 flex items-center gap-2 animate-fade-in">
-            <Shield className="w-4 h-4 flex-shrink-0" />{searchError}
-          </div>
-        </div>
-      )}
-
-      {searchLoading && !searchResults && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-24 mt-8 sm:mt-10 relative z-10">
-          <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-lg p-5 animate-pulse">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 skeleton rounded-xl" />
-              <div className="h-4 w-48 skeleton rounded-lg" />
+            {/* Spacing alignment wrapper for Telemetry HUD and Search Bar to prevent overlaps */}
+            <div className="relative z-20 max-w-[800px] mx-auto flex flex-col items-center gap-12 w-full px-4 justify-center">
+              <DiscoveryHUD />
+              <SearchBar onSearch={handleSearch} isLoading={searchLoading} />
             </div>
-            <div className="space-y-2 pl-5 border-l-2 border-red-500/20">
-              <div className="h-3 w-full skeleton rounded-lg" />
-              <div className="h-3 w-4/5 skeleton rounded-lg" />
-              <div className="h-3 w-3/4 skeleton rounded-lg" />
+          </section>
+        )}
+
+        {(searchResults || searchLoading) && (
+          <section className="px-4 sm:px-6 py-8 w-full flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden border-b border-zinc-900/60">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/10 via-transparent to-transparent opacity-60 pointer-events-none" />
+            <div className="max-w-[800px] mx-auto w-full relative z-10">
+              <SearchBar onSearch={handleSearch} isLoading={searchLoading} />
+            </div>
+          </section>
+        )}
+
+        {searchError && (
+          <div className="max-w-[800px] mx-auto px-6 mt-6 relative z-10 w-full flex justify-center">
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-sm text-red-400 flex items-center gap-2 animate-fade-in shadow-md max-w-full">
+              <Shield className="w-4 h-4 flex-shrink-0" />{searchError}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_35%] gap-6 sm:gap-8">
-            <SkeletonCards />
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg skeleton hidden lg:block" style={{ height: "400px" }} />
-          </div>
-        </section>
-      )}
+        )}
 
-      {searchResults && (
-        <section className="max-w-[1400px] mx-auto px-8 pb-24 mt-10 animate-fade-in relative z-10">
-          <div className="grid lg:grid-cols-[1fr_420px] gap-10 items-start">
-            <div className="space-y-10 min-w-0">
-              {searchResults.executive_summary && (
-                <div className="animate-slide-up" style={{ animationDelay: '100ms' }}>
-                  <ExecutiveSummary
-                    summary={searchResults.executive_summary}
-                    queryAnalysis={searchResults.query_analysis}
-                    processingTimeMs={searchResults.processing_time_ms}
-                  />
-                </div>
-              )}
+        {searchLoading && !searchResults && (
+          <section className="max-w-[1200px] mx-auto px-6 pb-24 mt-12 relative z-10 w-full flex-grow flex flex-col items-center justify-start">
+            <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-lg p-5 animate-pulse w-full max-w-[800px]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 skeleton rounded-xl" />
+                <div className="h-4 w-48 skeleton rounded-lg" />
+              </div>
+              <div className="space-y-2 pl-5 border-l-2 border-red-500/20">
+                <div className="h-3 w-full skeleton rounded-lg" />
+                <div className="h-3 w-4/5 skeleton rounded-lg" />
+                <div className="h-3 w-3/4 skeleton rounded-lg" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_35%] gap-6 sm:gap-8 w-full">
+              <SkeletonCards />
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 shadow-lg skeleton hidden lg:block" style={{ height: "400px" }} />
+            </div>
+          </section>
+        )}
 
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-6">
-                <div className="flex items-center gap-4">
-                  <h3 className="text-2xl font-bold text-zinc-100 tracking-tight flex items-center gap-3">
-                    Curated Pipeline
-                  </h3>
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-[10px] font-black uppercase tracking-widest border border-red-500/20">
-                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
-                    {searchResults.total_results} Experts Found
+        {searchResults && (
+          <section className="max-w-[1200px] mx-auto px-6 pb-24 mt-10 animate-fade-in relative z-10 w-full flex-grow flex flex-col items-center justify-start">
+            
+            {/* Mobile Tab Switcher - Sleek Segmented Control */}
+            <div className="flex lg:hidden w-full max-w-[500px] mx-auto mb-8 p-1 rounded-xl bg-zinc-950/80 border border-zinc-800 backdrop-blur-md">
+              <button
+                onClick={() => setResultsTab("list")}
+                className={cn(
+                  "flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2",
+                  resultsTab === "list"
+                    ? "bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/15"
+                    : "text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                <Search className="w-3.5 h-3.5" />
+                List
+              </button>
+              <button
+                onClick={() => setResultsTab("graph2d")}
+                className={cn(
+                  "flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2",
+                  resultsTab === "graph2d"
+                    ? "bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/15"
+                    : "text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                <Network className="w-3.5 h-3.5" />
+                2D Topology
+              </button>
+              <button
+                onClick={() => setResultsTab("graph3d")}
+                className={cn(
+                  "flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2",
+                  resultsTab === "graph3d"
+                    ? "bg-gradient-to-r from-red-600 to-red-500 text-white shadow-lg shadow-red-500/15"
+                    : "text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                3D Space
+              </button>
+            </div>
+
+            <div className="grid lg:grid-cols-[1fr_420px] gap-10 items-start w-full">
+              
+              {/* Left Column (List view) */}
+              <div className={cn(
+                "space-y-10 min-w-0 text-left flex flex-col items-start justify-start w-full",
+                resultsTab === "list" ? "block" : "hidden lg:block"
+              )}>
+                {searchResults.executive_summary && (
+                  <div className="animate-slide-up w-full" style={{ animationDelay: '100ms' }}>
+                    <ExecutiveSummary
+                      summary={searchResults.executive_summary}
+                      queryAnalysis={searchResults.query_analysis}
+                      processingTimeMs={searchResults.processing_time_ms}
+                      onShowAll={() => setSelectedExpertId(null)}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-6 w-full">
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-2xl font-bold text-zinc-100 tracking-tight flex items-center gap-3">
+                      Curated Pipeline
+                    </h3>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/10 text-red-400 text-[10px] font-black uppercase tracking-widest border border-red-500/20">
+                      <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+                      {searchResults.total_results} Experts Found
+                    </div>
+                  </div>
+                  <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest bg-zinc-800 px-3 py-1 rounded-lg border border-zinc-700">
+                    Latency: {searchResults.processing_time_ms}ms
                   </div>
                 </div>
-                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest bg-zinc-800 px-3 py-1 rounded-lg border border-zinc-700">
-                  Latency: {searchResults.processing_time_ms}ms
+
+                <div className="grid gap-6 animate-stagger w-full">
+                  {renderedResults}
                 </div>
               </div>
 
-              <div className="grid gap-6 animate-stagger">
-                {renderedResults}
+              {/* Desktop Sticky Sidebar (Both 2D and 3D Graphs Stacked) */}
+              <div className="min-w-0 hidden lg:block sticky top-[100px] flex flex-col gap-6 w-full pb-6 z-20">
+                {searchResults.graph_data && searchResults.graph_data.nodes.length > 0 && (
+                  <>
+                    {/* 2D Knowledge Graph Card */}
+                    <div className="flex flex-col h-[calc(50vh-90px)] rounded-2xl border border-zinc-800/60 bg-zinc-950/80 backdrop-blur-md overflow-hidden shadow-2xl gold-glow relative z-10 transition-all hover:border-zinc-700/60 duration-300">
+                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 shrink-0 bg-zinc-900/80 backdrop-blur-sm">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                            <Network className="w-4 h-4 text-amber-400" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-zinc-100">Knowledge Graph</div>
+                            <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">
+                              2D Topology Discovery
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                          {searchResults.graph_data.nodes.length} Nodes
+                        </div>
+                      </div>
+                      <div className="flex-grow min-h-0 relative">
+                        <div className="absolute inset-0 w-full h-full">
+                          <KnowledgeGraphViz data={searchResults.graph_data} selectedId={selectedExpertId} hideHeader />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3D Semantic Vector Space Card */}
+                    <div className="flex flex-col h-[calc(50vh-90px)] rounded-2xl border border-zinc-800/60 bg-zinc-950/80 backdrop-blur-md overflow-hidden shadow-2xl red-glow relative z-10 transition-all hover:border-zinc-700/60 duration-300">
+                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 shrink-0 bg-zinc-900/80 backdrop-blur-sm">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-xl bg-red-500/10 border border-red-500/20">
+                            <Globe className="w-4 h-4 text-red-400" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-zinc-100">3D Vector Space</div>
+                            <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">
+                              Semantic Vector space
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                          3D Space
+                        </div>
+                      </div>
+                      <div className="flex-grow min-h-0 relative">
+                        <div className="absolute inset-0 w-full h-full">
+                          <Vector3DGraph data={searchResults.graph_data} selectedId={selectedExpertId} hideHeader />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
+
+              {/* Mobile Graph Panels - shown only when that specific tab is active */}
+              <div className={cn(
+                "w-full h-[520px] lg:hidden",
+                resultsTab === "graph2d" ? "block" : "hidden"
+              )}>
+                {searchResults.graph_data && searchResults.graph_data.nodes.length > 0 && (
+                  <KnowledgeGraphViz data={searchResults.graph_data} selectedId={selectedExpertId} />
+                )}
+              </div>
+
+              <div className={cn(
+                "w-full h-[520px] lg:hidden",
+                resultsTab === "graph3d" ? "block" : "hidden"
+              )}>
+                {searchResults.graph_data && searchResults.graph_data.nodes.length > 0 && (
+                  <Vector3DGraph data={searchResults.graph_data} selectedId={selectedExpertId} />
+                )}
+              </div>
+
             </div>
+          </section>
+        )}
 
-            <div className="min-w-0 hidden lg:block sticky top-[100px] space-y-6">
-              {searchResults.graph_data && searchResults.graph_data.nodes.length > 0 && (
-                <>
-                  <div className="h-[400px]">
-                    <KnowledgeGraphViz data={searchResults.graph_data} selectedId={selectedExpertId} />
+        {/* Feature Cards Section with generous margins and premium grid layout */}
+        {!searchResults && !searchLoading && (
+          <section className="max-w-[1200px] mx-auto px-6 pt-16 pb-28 relative z-10 w-full flex flex-col items-center justify-center">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+              {[
+                { title: "Semantic Search", desc: "384-dimensional vector embeddings find experts by meaning, not keywords. Powered by sentence-transformers.", icon: Search },
+                { title: "Knowledge Graph", desc: "Multi-hop graph traversal discovers contextually adjacent experts through company, industry, and topic relationships.", icon: Network },
+                { title: "AI Re-ranking", desc: "LLM agent scores every candidate 1-10 with detailed reasoning and generates executive summaries.", icon: Brain },
+              ].map((feature) => (
+                <div key={feature.title} className="p-8 rounded-2xl glass-card hover:border-red-500/30 hover:shadow-xl hover:shadow-red-500/5 transition-all duration-300 group cursor-pointer">
+                  <div className="w-10 h-10 rounded-[14px] bg-red-500/10 flex items-center justify-center mb-6 border border-red-500/20 group-hover:bg-red-500/20 transition-all">
+                    <feature.icon className="w-5 h-5 text-red-400" />
                   </div>
-
-                  <div className="h-[500px]">
-                    <Vector3DGraph data={searchResults.graph_data} selectedId={selectedExpertId} />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {!searchResults && !searchLoading && (
-        <section className="max-w-[1000px] mx-auto px-6 pb-24 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { title: "Semantic Search", desc: "384-dimensional vector embeddings find experts by meaning, not keywords. Powered by sentence-transformers.", icon: Search },
-              { title: "Knowledge Graph", desc: "Multi-hop graph traversal discovers contextually adjacent experts through company, industry, and topic relationships.", icon: Network },
-              { title: "AI Re-ranking", desc: "LLM agent scores every candidate 1-10 with detailed reasoning and generates executive summaries.", icon: Brain },
-            ].map((feature) => (
-              <div key={feature.title} className="p-7 rounded-[24px] bg-zinc-900/80 border border-zinc-800 shadow-lg hover:border-red-500/30 hover:shadow-xl hover:shadow-red-500/5 transition-all duration-300 group">
-                <div className="w-10 h-10 rounded-[14px] bg-red-500/10 flex items-center justify-center mb-5 border border-red-500/20 group-hover:bg-red-500/20 transition-all">
-                  <feature.icon className="w-5 h-5 text-red-400" />
+                  <h4 className="text-[17px] font-bold text-zinc-100 mb-2.5">{feature.title}</h4>
+                  <p className="text-zinc-400 text-[14px] leading-relaxed">{feature.desc}</p>
                 </div>
-                <h4 className="text-[17px] font-bold text-zinc-100 mb-2">{feature.title}</h4>
-                <p className="text-zinc-400 text-[14px] leading-relaxed">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
 
-      <footer className="relative z-10 border-t border-zinc-800 py-12 px-6 mt-auto">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row items-center justify-between gap-8 text-sm font-bold text-zinc-500 uppercase tracking-widest">
+      {/* Footer fully aligned with the content grid */}
+      <footer className="relative z-10 border-t border-zinc-800/60 py-12 px-6 bg-zinc-950/40 backdrop-blur-md mt-auto">
+        <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row items-center justify-between gap-8 text-[11px] font-bold text-zinc-500 uppercase tracking-widest w-full">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
               <Brain className="w-4 h-4 text-red-400" />
@@ -356,7 +478,7 @@ export default function HomePage() {
             <span>© 2026 ExpertIQ Copilot</span>
           </div>
           <div className="flex items-center gap-10">
-            <a href={docsHref} className="hover:text-zinc-100 transition-colors">API Documentation</a>
+
             <a href="https://github.com" className="hover:text-zinc-100 transition-colors">GitHub</a>
             <a href="#" className="hover:text-zinc-100 transition-colors">Privacy</a>
           </div>

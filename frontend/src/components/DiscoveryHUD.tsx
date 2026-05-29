@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Brain, Network, Database, Shield, Cpu, Layers } from "@/components/icons";
+import { Brain, Database, Cpu, Layers } from "@/components/icons";
 
 
 export default function DiscoveryHUD() {
@@ -25,7 +25,7 @@ export default function DiscoveryHUD() {
   ];
 
   return (
-    <div className="w-full max-w-[800px] mx-auto mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-xl shadow-xl overflow-hidden animate-fade-in">
+    <div className="w-full max-w-[800px] mx-auto rounded-2xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-xl shadow-xl overflow-hidden animate-fade-in hover:border-zinc-700/60 transition-all duration-300">
       <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-red-500/10 border border-red-500/20">
@@ -64,9 +64,9 @@ export default function DiscoveryHUD() {
       <div className="p-6">
         {activeTab === "system" ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between">
+            <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between hover:border-emerald-500/20 hover:bg-zinc-950/60 hover:scale-[1.01] transition-all duration-300 cursor-pointer group">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20 transition-all">
                   <Database className="w-4 h-4" />
                 </div>
                 <div>
@@ -77,9 +77,9 @@ export default function DiscoveryHUD() {
               <span className={`w-2 h-2 rounded-full bg-emerald-500 transition-all ${pulse ? "opacity-100 scale-110 shadow-[0_0_12px_rgba(16,185,129,0.6)]" : "opacity-60 scale-100"}`} />
             </div>
 
-            <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between">
+            <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between hover:border-amber-500/20 hover:bg-zinc-950/60 hover:scale-[1.01] transition-all duration-300 cursor-pointer group">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
+                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20 transition-all">
                   <Layers className="w-4 h-4" />
                 </div>
                 <div>
@@ -90,9 +90,9 @@ export default function DiscoveryHUD() {
               <span className={`w-2 h-2 rounded-full bg-emerald-500 transition-all ${pulse ? "opacity-100 scale-110 shadow-[0_0_12px_rgba(16,185,129,0.6)]" : "opacity-60 scale-100"}`} />
             </div>
 
-            <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between">
+            <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between hover:border-red-500/20 hover:bg-zinc-950/60 hover:scale-[1.01] transition-all duration-300 cursor-pointer group">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-500/10 text-red-400">
+                <div className="p-2 rounded-lg bg-red-500/10 text-red-400 group-hover:bg-red-500/20 transition-all">
                   <Brain className="w-4 h-4" />
                 </div>
                 <div>

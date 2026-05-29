@@ -41,8 +41,7 @@ class ExpertProfile(ExpertBase):
         default=None, description="LLM-generated relevance reasoning"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ExpertListResponse(BaseModel):
@@ -53,5 +52,4 @@ class ExpertListResponse(BaseModel):
     page: int
     page_size: int
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}

@@ -7,12 +7,38 @@ All secrets are read from .env — never hardcoded.
 
 from functools import lru_cache
 from typing import List, Optional
+import os
+from dotenv import load_dotenv
+
+# Load .env file from the workspace root (parent directory search is automatic)
+# override=False ensures platform-injected env vars (Railway, etc.) take precedence
+load_dotenv(override=False)
+
+# Standardise LangSmith vs LangChain environment variables to ensure tracing works
+if os.environ.get("LANGSMITH_TRACING") == "true":
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+if os.environ.get("LANGSMITH_API_KEY"):
+    os.environ["LANGCHAIN_API_KEY"] = os.environ["LANGSMITH_API_KEY"]
+if os.environ.get("LANGSMITH_ENDPOINT"):
+    os.environ["LANGCHAIN_ENDPOINT"] = os.environ["LANGSMITH_ENDPOINT"]
+if os.environ.get("LANGSMITH_PROJECT"):
+    # Strip any potential surrounding quotes from the .env project value
+    project_val = os.environ["LANGSMITH_PROJECT"].strip('\'"')
+    os.environ["LANGCHAIN_PROJECT"] = project_val
+    os.environ["LANGSMITH_PROJECT"] = project_val
 
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+        "extra": "ignore",
+    }
 
     # ── App ──
     APP_ENV: str = "development"
@@ -63,12 +89,20 @@ class Settings(BaseSettings):
     # Max experts for graph operations
     GRAPH_MAX_TRAVERSAL_RESULTS: int = 20
     # Graph feature toggle for local low-memory demos
-    ENABLE_KNOWLEDGE_GRAPH: bool = False
+    ENABLE_KNOWLEDGE_GRAPH: bool = True
     # Optional startup prewarm (loads all experts into in-memory index)
     PREWARM_LIGHTWEIGHT_INDEX: bool = False
     # Payload caps to avoid large response bodies
     GRAPH_MAX_RESPONSE_NODES: int = 32
     GRAPH_MAX_RESPONSE_EDGES: int = 64
+
+    # ── Seed Users (set via env vars, never hardcode credentials) ──
+    SEED_DEMO_EMAIL: Optional[str] = None
+    SEED_DEMO_PASSWORD: Optional[str] = None
+    SEED_DEMO_NAME: str = "Demo User"
+    SEED_ADMIN_EMAIL: Optional[str] = None
+    SEED_ADMIN_PASSWORD: Optional[str] = None
+    SEED_ADMIN_NAME: str = "Admin User"
 
     @property
     def is_production(self) -> bool:
@@ -83,12 +117,6 @@ class Settings(BaseSettings):
             and self.GROQ_API_KEY
             and self.GROQ_API_KEY != "your_groq_api_key_here"
         )
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"
 
 
 

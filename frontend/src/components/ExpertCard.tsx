@@ -63,8 +63,8 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border bg-zinc-900/80 shadow-lg backdrop-blur-sm",
-        "border-zinc-800 hover:border-red-500/40 hover:shadow-xl hover:-translate-y-[2px]",
+        "group relative rounded-2xl border glass-card shadow-lg backdrop-blur-sm",
+        "hover:border-red-500/30 hover:shadow-xl hover:shadow-red-500/5 hover:-translate-y-[2px]",
         "transition-all duration-300"
       )}
       id={`expert-card-${expert.id}`}

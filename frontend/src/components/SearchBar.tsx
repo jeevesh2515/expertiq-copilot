@@ -2,11 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Command,
   Loader2,
   Search,
   SlidersHorizontal,
-  Sparkles,
   X,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -69,9 +67,9 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
   const activeFilterCount = [industry, seniority, availability].filter(Boolean).length;
 
   return (
-    <div className="w-full max-w-[800px] mx-auto relative z-20" id="search-bar">
-      <form role="search" onSubmit={handleSubmit} className="relative">
-        <div className="relative group max-w-[850px] mx-auto">
+    <div className="w-full max-w-[800px] mx-auto relative z-20 flex flex-col items-center justify-center" id="search-bar">
+      <form role="search" onSubmit={handleSubmit} className="relative w-full flex flex-col items-center justify-center">
+        <div className="relative group max-w-[850px] mx-auto w-full">
           <div
             className={cn(
               "relative flex items-center rounded-[32px] transition-all duration-300",
@@ -150,8 +148,8 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-[13px]">
-          <span className="text-zinc-500">Try:</span>
+        <div className="flex flex-wrap items-center justify-center gap-2.5 mt-5">
+          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mr-1">Try:</span>
           {["AI ethics in healthcare", "renewable energy financing", "semiconductor supply chain"].map((suggestion) => (
             <button
               key={suggestion}
@@ -160,7 +158,7 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
                 setQuery(suggestion);
                 onSearch(suggestion);
               }}
-              className="text-red-400 hover:text-red-300 hover:underline transition-colors"
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-zinc-900/40 border border-zinc-800/80 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
             >
               {suggestion}
             </button>

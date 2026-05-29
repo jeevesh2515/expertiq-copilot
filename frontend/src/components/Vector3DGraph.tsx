@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Network, Maximize2, Minimize2, RotateCw } from "@/components/icons";
-import type { GraphData, GraphNode, GraphEdge } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import type { GraphData, GraphNode } from "@/lib/api";
 import * as THREE from 'three';
 
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), { ssr: false });
@@ -11,6 +12,7 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), { ssr: false 
 interface Vector3DGraphProps {
   data: GraphData;
   selectedId?: string | null;
+  hideHeader?: boolean;
 }
 
 const NODE_COLORS: Record<string, string> = {
@@ -27,17 +29,11 @@ const NODE_SIZES: Record<string, number> = {
   topic: 3,
 };
 
-const GLOW_COLORS: Record<string, string> = {
-  expert: "#EF4444",
-  company: "#F59E0B",
-  industry: "#A78BFA",
-  topic: "#34D399",
-};
-
-export default function Vector3DGraph({ data, selectedId }: Vector3DGraphProps) {
+export default function Vector3DGraph({ data, selectedId, hideHeader }: Vector3DGraphProps) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 480 });
+  const [dimensions, setDimensions] = useState({ width: 380, height: 240 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
 
@@ -45,9 +41,11 @@ export default function Vector3DGraph({ data, selectedId }: Vector3DGraphProps) 
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
+        const w = entry.contentRect.width;
+        const h = entry.contentRect.height;
         setDimensions({
-          width: entry.contentRect.width,
-          height: isFullscreen ? window.innerHeight - 80 : entry.contentRect.height,
+          width: w > 50 ? w : 380,
+          height: isFullscreen ? window.innerHeight - 80 : (h > 50 ? h : 240),
         });
       }
     });
@@ -73,9 +71,10 @@ export default function Vector3DGraph({ data, selectedId }: Vector3DGraphProps) 
 
   useEffect(() => {
     if (fgRef.current && graphData.nodes.length > 0) {
-      setTimeout(() => {
-        fgRef.current?.zoomToFit(400, 60);
-      }, 500);
+      const timer = setTimeout(() => {
+        fgRef.current?.zoomToFit(500, 50);
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [graphData]);
 
@@ -91,61 +90,71 @@ export default function Vector3DGraph({ data, selectedId }: Vector3DGraphProps) 
 
   return (
     <div
-      className={`rounded-xl border border-zinc-800 bg-zinc-900 flex flex-col overflow-hidden transition-all duration-500 ${
-        isFullscreen ? 'fixed inset-4 z-50' : 'h-full'
-      }`}
+      className={cn(
+        "flex flex-col overflow-hidden transition-all duration-500",
+        isFullscreen ? 'fixed inset-4 z-50 bg-zinc-900 border border-zinc-800 rounded-xl' : '',
+        !isFullscreen && !hideHeader ? 'rounded-2xl border border-zinc-800 bg-zinc-900/80 glass-card h-full' : '',
+        !isFullscreen && hideHeader ? 'bg-transparent border-0 w-full h-full' : ''
+      )}
       id="vector-3d-graph"
     >
-      <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 shrink-0 bg-zinc-900/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-            <Network className="w-4 h-4 text-red-400" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-zinc-100">3D Semantic Vector Space</div>
-            <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-              {data.nodes.length} nodes · {data.edges.length} edges
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-5 py-3 border-b border-zinc-800 shrink-0 bg-zinc-900/80 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              <Network className="w-4 h-4 text-red-400" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-zinc-100">3D Semantic Vector Space</div>
+              <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                {data.nodes.length} nodes · {data.edges.length} edges
+              </div>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleZoomToFit}
+              className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all cursor-pointer"
+              title="Reset view"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all cursor-pointer"
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleZoomToFit}
-            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
-            title="Reset view"
-          >
-            <RotateCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all"
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
+      )}
 
       <div className="relative flex-1 bg-zinc-950 overflow-hidden" ref={containerRef}>
         {dimensions.width > 0 && (
           <ForceGraph3D
+            key={`${selectedId || "all"}-${data.nodes.length}`}
             ref={fgRef}
             width={dimensions.width}
             height={dimensions.height}
             graphData={graphData}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             nodeLabel={(node: any) => `${node.label} (${node.type})`}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             nodeColor={(node: any) => NODE_COLORS[node.type] || "#71717A"}
-            nodeRelSize={6}
-            linkColor={() => "rgba(255, 255, 255, 0.08)"}
-            linkWidth={0.5}
-            linkDirectionalParticles={1}
+            nodeRelSize={7}
+            linkColor={() => "rgba(148, 163, 184, 0.35)"}
+            linkWidth={0.8}
+            linkDirectionalParticles={2}
             linkDirectionalParticleWidth={1.5}
-            linkDirectionalParticleColor={() => "rgba(239, 68, 68, 0.4)"}
+            linkDirectionalParticleColor={() => "#EF4444"}
             backgroundColor="#09090B"
             showNavInfo={false}
             enableNodeDrag={true}
             enableNavigationControls={true}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onNodeHover={(node: any) => setHoveredNode(node || null)}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             nodeThreeObject={(node: any) => {
               const color = new THREE.Color(NODE_COLORS[node.type] || "#71717A");
               const size = NODE_SIZES[node.type] || 3;
@@ -158,9 +167,9 @@ export default function Vector3DGraph({ data, selectedId }: Vector3DGraphProps) 
                 new THREE.MeshStandardMaterial({
                   color: color,
                   emissive: color,
-                  emissiveIntensity: isSelected ? 0.8 : 0.3,
-                  roughness: 0.3,
-                  metalness: 0.1,
+                  emissiveIntensity: isSelected ? 1.2 : 0.45,
+                  roughness: 0.25,
+                  metalness: 0.15,
                 })
               );
               group.add(sphere);
@@ -189,26 +198,12 @@ export default function Vector3DGraph({ data, selectedId }: Vector3DGraphProps) 
                 new THREE.MeshBasicMaterial({
                   color: color,
                   transparent: true,
-                  opacity: isSelected ? 0.25 : 0.1,
+                  opacity: isSelected ? 0.35 : 0.15,
                 })
               );
               group.add(glowSphere);
 
               return group;
-            }}
-            linkThreeObject={(link: any) => {
-              const material = new THREE.LineBasicMaterial({
-                color: 0xEF4444,
-                transparent: true,
-                opacity: 0.15,
-              });
-              const geometry = new THREE.BufferGeometry();
-              const positions = new Float32Array([
-                link.source.x || 0, link.source.y || 0, link.source.z || 0,
-                link.target.x || 0, link.target.y || 0, link.target.z || 0,
-              ]);
-              geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-              return new THREE.Line(geometry, material);
             }}
             d3AlphaDecay={0.02}
             d3VelocityDecay={0.3}

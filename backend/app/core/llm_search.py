@@ -64,13 +64,13 @@ class LLMSemanticSearch:
             from groq import Groq
 
             client = Groq(api_key=settings.GROQ_API_KEY)
-            message = client.messages.create(
+            response = client.chat.completions.create(
                 model=settings.GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=500,
             )
-            return message.content[0].text
+            return response.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"Groq API call failed: {e}")
             raise

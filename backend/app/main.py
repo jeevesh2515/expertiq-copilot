@@ -59,14 +59,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("ExpertIQ Copilot starting up...")
     logger.info("═" * 60)
 
-    # 1. Init database
-    init_db()
-    logger.info("✓ Database tables initialised.")
-
-    # 2. Seed experts
-    db = SessionLocal()
+    # 1. Resilient database initialization and seeding
+    db = None
     experts = []
     try:
+        init_db()
+        logger.info("✓ Database tables initialised.")
+
+        db = SessionLocal()
         expert_count = db.query(Expert).count()
         if expert_count == 0:
             from app.data.seed_experts import seed_experts
@@ -150,7 +150,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("✓ Knowledge graph disabled for low-memory local mode.")
 
     finally:
-        db.close()
+        if db:
+            db.close()
 
     logger.info("═" * 60)
     logger.info("ExpertIQ Copilot ready! 🚀")

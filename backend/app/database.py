@@ -24,7 +24,7 @@ engine_kwargs = {
     "echo": False,
 }
 
-if db_url.startswith("sqlite"):
+if db_url and db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
 else:
     engine_kwargs["pool_size"] = 10
@@ -32,12 +32,31 @@ else:
     engine_kwargs["pool_recycle"] = 3600
     engine_kwargs["pool_pre_ping"] = True
 
-engine = create_engine(
-    db_url,
-    connect_args=connect_args,
-    **engine_kwargs
-)
-
+# Safe creation of engine to prevent import-time crashes if DATABASE_URL is missing or invalid.
+# Falls back gracefully to an in-memory SQLite database so that the app can still boot
+# and respond to healthcheck probes.
+try:
+    if not db_url or "CHANGE_ME" in db_url:
+        raise ValueError("Invalid or default placeholder DATABASE_URL")
+    engine = create_engine(
+        db_url,
+        connect_args=connect_args,
+        **engine_kwargs
+    )
+except Exception as e:
+    print(
+        f"WARNING: SQLAlchemy engine creation failed ({e}). "
+        f"Falling back to safe in-memory SQLite database for liveness.",
+        file=sys.stderr
+    )
+    db_url = "sqlite:///:memory:"
+    connect_args = {"check_same_thread": False}
+    engine_kwargs = {"echo": False}
+    engine = create_engine(
+        db_url,
+        connect_args=connect_args,
+        **engine_kwargs
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

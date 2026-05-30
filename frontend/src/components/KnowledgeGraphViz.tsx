@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from "react";
-import { Network, Maximize2, Minimize2, RotateCw } from "@/components/icons";
+import { Network, Maximize2, Minimize2, RotateCw, SlidersHorizontal, X, Search } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { GraphData, GraphNode, GraphEdge } from "@/lib/api";
 
@@ -9,6 +9,7 @@ interface KnowledgeGraphVizProps {
   data: GraphData;
   selectedId?: string | null;
   hideHeader?: boolean;
+  onSelectNode?: (nodeId: string | null) => void;
 }
 
 const NODE_COLORS: Record<string, string> = {
@@ -44,12 +45,10 @@ interface ForceLink {
   targetNode: ForceNode;
 }
 
-const ALPHA_DECAY = 0.003;
+const ALPHA_DECAY = 0.0035;
 const ALPHA_MIN = 0.001;
-const VELOCITY_DECAY = 0.46;
-const REPULSION_STRENGTH = 2600;
+const VELOCITY_DECAY = 0.44;
 const REPULSION_DISTANCE_MAX = 390;
-const SPRING_LENGTH = 104;
 const SPRING_STRENGTH = 0.095;
 const CENTER_GRAVITY = 0.032;
 const TYPE_GRAVITY = 0.026;
@@ -87,7 +86,16 @@ function getTypeAnchor(type: string, width: number, height: number) {
   };
 }
 
-function stepForceSimulation(nodes: ForceNode[], links: ForceLink[], width: number, height: number, alpha: number) {
+function stepForceSimulation(
+  nodes: ForceNode[],
+  links: ForceLink[],
+  width: number,
+  height: number,
+  alpha: number,
+  repulsionStrength: number,
+  gravityStrength: number,
+  springLength: number
+) {
   for (const n of nodes) {
     if (n.pinned) continue;
     let fx = 0;
@@ -102,7 +110,7 @@ function stepForceSimulation(nodes: ForceNode[], links: ForceLink[], width: numb
       const minDist = n.radius + other.radius + COLLISION_PADDING;
 
       if (dist < REPULSION_DISTANCE_MAX) {
-        const strength = (REPULSION_STRENGTH * alpha) / distSq;
+        const strength = (repulsionStrength * alpha) / distSq;
         fx += (dx / dist) * strength;
         fy += (dy / dist) * strength;
       }
@@ -123,7 +131,7 @@ function stepForceSimulation(nodes: ForceNode[], links: ForceLink[], width: numb
         const dx = other.x - n.x;
         const dy = other.y - n.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const desiredLength = SPRING_LENGTH + (n.type === other.type ? -10 : 8);
+        const desiredLength = springLength + (n.type === other.type ? -10 : 8);
         const displacement = dist - desiredLength;
         const strength = SPRING_STRENGTH * displacement * alpha;
         fx += (dx / dist) * strength;
@@ -137,8 +145,8 @@ function stepForceSimulation(nodes: ForceNode[], links: ForceLink[], width: numb
 
     fx += (centerX - n.x) * CENTER_GRAVITY * alpha;
     fy += (centerY - n.y) * CENTER_GRAVITY * alpha;
-    fx += (anchor.x - n.x) * TYPE_GRAVITY * alpha;
-    fy += (anchor.y - n.y) * TYPE_GRAVITY * alpha;
+    fx += (anchor.x - n.x) * gravityStrength * alpha;
+    fy += (anchor.y - n.y) * gravityStrength * alpha;
 
     n.vx = (n.vx + fx) * VELOCITY_DECAY;
     n.vy = (n.vy + fy) * VELOCITY_DECAY;
@@ -206,10 +214,40 @@ function computeForceLayout(
   return { nodes: forceNodes, links: forceLinks, nodeMap };
 }
 
-function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizProps) {
+function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: KnowledgeGraphVizProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const alphaRef = useRef(1);
+  
+  // Interactive Settings Drawer State
+  const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({
+    expert: true,
+    company: true,
+    industry: true,
+    topic: true,
+  });
+  const [graphSearch, setGraphSearch] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [simParams, setSimParams] = useState({
+    repulsion: 2600,
+    gravity: 0.026,
+    spring: 104,
+  });
+
+  // Reference for no-delay physics updates inside 60fps canvas ticks
+  const repulsionRef = useRef(2600);
+  const gravityRef = useRef(0.026);
+  const springRef = useRef(104);
+
+  useEffect(() => {
+    repulsionRef.current = simParams.repulsion;
+    gravityRef.current = simParams.gravity;
+    springRef.current = simParams.spring;
+    alphaRef.current = Math.max(alphaRef.current, 0.25);
+    settledRef.current = false;
+    setIsSettled(false);
+  }, [simParams]);
+
   const [dimensions, setDimensions] = useState({ width: 380, height: 240 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSettled, setIsSettled] = useState(true);
@@ -217,6 +255,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
   const transformRef = useRef({ x: 0, y: 0, scale: 1 });
   const isDraggingCanvas = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const mouseDownPos = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ nodeId: string | null }>({ nodeId: null });
   const [tooltipNode, setTooltipNode] = useState<ForceNode | null>(null);
@@ -236,22 +275,28 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
     return () => observer.disconnect();
   }, [isFullscreen]);
 
+  // Dynamic nodes/edges filtering based on activeTypes and selectedId
   const filteredNodes = useMemo(() => {
     if (!data || !data.nodes) return [];
-    const nodes = data.nodes || [];
+    let nodes = data.nodes || [];
     const edges = data.edges || [];
-    return selectedId
-      ? nodes.filter(
-          (n) =>
-            n.id === selectedId ||
-            edges.some(
-              (e) =>
-                (e.source === selectedId && e.target === n.id) ||
-                (e.target === selectedId && e.source === n.id),
-            ),
-        )
-      : nodes;
-  }, [data, selectedId]);
+
+    // Filter by user active types checkbox
+    nodes = nodes.filter((n) => activeTypes[n.type]);
+
+    if (selectedId) {
+      nodes = nodes.filter(
+        (n) =>
+          n.id === selectedId ||
+          edges.some(
+            (e) =>
+              ((e.source === selectedId && e.target === n.id) ||
+              (e.target === selectedId && e.source === n.id))
+          ),
+      );
+    }
+    return nodes;
+  }, [data, selectedId, activeTypes]);
 
   const filteredEdges = useMemo(() => {
     if (!data || !data.nodes || !data.edges) return [];
@@ -284,6 +329,8 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    frameCountRef.current++;
+
     const { nodes, links } = simRef.current;
     const { x: tx, y: ty, scale } = transformRef.current;
     const hoveredId = hoveredRef.current;
@@ -298,102 +345,76 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
       ctx.scale(dpr, dpr);
     }
 
-    ctx.clearRect(0, 0, width, height);
-
-    // Deep dark background with subtle gradient — Obsidian style
-    const bg = ctx.createLinearGradient(0, 0, width, height);
-    bg.addColorStop(0, "#0a0c10");
-    bg.addColorStop(0.5, "#080a0e");
-    bg.addColorStop(1, "#0c0a0e");
-    ctx.fillStyle = bg;
+    // Clear canvas
+    ctx.fillStyle = "#08090b";
     ctx.fillRect(0, 0, width, height);
 
-    // Soft radial glow at center
-    const centerGlow = ctx.createRadialGradient(
-      width * 0.48, height * 0.45, 0,
-      width * 0.48, height * 0.45, Math.max(width, height) * 0.55
-    );
-    centerGlow.addColorStop(0, "rgba(239, 68, 68, 0.06)");
-    centerGlow.addColorStop(0.35, "rgba(167, 139, 250, 0.03)");
-    centerGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = centerGlow;
-    ctx.fillRect(0, 0, width, height);
-
-    // Subtle dot grid — Obsidian style
+    // Draw background dot grid with radial center glow
     ctx.save();
-    ctx.fillStyle = "rgba(148, 163, 184, 0.04)";
-    const gridSpacing = 28;
-    for (let gx = gridSpacing; gx < width; gx += gridSpacing) {
-      for (let gy = gridSpacing; gy < height; gy += gridSpacing) {
-        ctx.fillRect(gx, gy, 1, 1);
+    const radGlow = ctx.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, Math.max(width, height) * 0.7);
+    radGlow.addColorStop(0, "rgba(239, 68, 68, 0.035)");
+    radGlow.addColorStop(0.5, "rgba(245, 158, 11, 0.012)");
+    radGlow.addColorStop(1, "rgba(8, 9, 11, 0)");
+    ctx.fillStyle = radGlow;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "rgba(63, 63, 70, 0.16)";
+    const dotSpacing = 20;
+    const gridOffsetX = tx % dotSpacing;
+    const gridOffsetY = ty % dotSpacing;
+    for (let x = gridOffsetX; x < width; x += dotSpacing) {
+      for (let y = gridOffsetY; y < height; y += dotSpacing) {
+        ctx.beginPath();
+        ctx.arc(x, y, 0.75, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
     ctx.restore();
 
-    // Transform for pan/zoom
+    // Transform viewport coordinates (zoom + pan)
     ctx.save();
     ctx.translate(tx, ty);
     ctx.scale(scale, scale);
 
-    // ─── Draw edges with animated flow ───
-    frameCountRef.current++;
-    const flowPhase = (frameCountRef.current % 120) / 120;
-
+    // ─── 1. Draw Links ───
     for (const link of links) {
-      const sx = link.sourceNode.x;
-      const sy = link.sourceNode.y;
-      const ex = link.targetNode.x;
-      const ey = link.targetNode.y;
+      const sn = link.sourceNode;
+      const tn = link.targetNode;
+      const isFocusedLink = sn.id === hoveredId || tn.id === hoveredId || sn.id === selectedId || tn.id === selectedId;
+      const isDimmedLink = !!(hoveredId || selectedId) && !isFocusedLink;
 
-      const isActiveLink = hoveredId
-        ? link.sourceNode.id === hoveredId || link.targetNode.id === hoveredId
-        : selectedId
-          ? link.sourceNode.id === selectedId || link.targetNode.id === selectedId
-          : false;
+      ctx.save();
+      const grad = ctx.createLinearGradient(sn.x, sn.y, tn.x, tn.y);
+      const c1 = NODE_COLORS[sn.type] || "#71717A";
+      const c2 = NODE_COLORS[tn.type] || "#71717A";
 
-      const dx = ex - sx;
-      const dy = ey - sy;
-      const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-      const curve = Math.min(16, distance * 0.07);
-      const cx2 = (sx + ex) / 2 - (dy / distance) * curve;
-      const cy2 = (sy + ey) / 2 + (dx / distance) * curve;
+      const opacity = isDimmedLink ? "05" : isFocusedLink ? "70" : "1A";
+      grad.addColorStop(0, c1 + opacity);
+      grad.addColorStop(1, c2 + opacity);
 
-      // Edge line with gradient
-      const edgeGrad = ctx.createLinearGradient(sx, sy, ex, ey);
-      if (isActiveLink) {
-        edgeGrad.addColorStop(0, "rgba(248, 113, 113, 0.6)");
-        edgeGrad.addColorStop(1, "rgba(248, 113, 113, 0.35)");
-      } else {
-        edgeGrad.addColorStop(0, "rgba(148, 163, 184, 0.12)");
-        edgeGrad.addColorStop(1, "rgba(148, 163, 184, 0.08)");
-      }
-
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = isFocusedLink ? 1.8 : 0.9;
       ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.quadraticCurveTo(cx2, cy2, ex, ey);
-      ctx.strokeStyle = edgeGrad;
-      ctx.lineWidth = isActiveLink ? 1.6 : 0.7;
+      ctx.moveTo(sn.x, sn.y);
+      ctx.lineTo(tn.x, tn.y);
       ctx.stroke();
 
-      // Animated flow dot along edge
-      if (isActiveLink) {
-        const t = flowPhase;
-        const fx = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx2 + t * t * ex;
-        const fy = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy2 + t * t * ey;
+      // Flowing dotted animation on focused connections
+      if (isFocusedLink && !isDimmedLink) {
+        const timeOffset = (frameCountRef.current * 0.3) % 24;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.44)";
+        ctx.lineWidth = 1.1;
+        ctx.setLineDash([2, 8]);
+        ctx.lineDashOffset = -timeOffset;
         ctx.beginPath();
-        ctx.arc(fx, fy, 2, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(248, 113, 113, 0.85)";
-        ctx.fill();
+        ctx.moveTo(sn.x, sn.y);
+        ctx.lineTo(tn.x, tn.y);
+        ctx.stroke();
       }
-
-      // Midpoint dot
-      ctx.beginPath();
-      ctx.arc(cx2, cy2, isActiveLink ? 1.5 : 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = isActiveLink ? "rgba(248, 113, 113, 0.6)" : "rgba(148, 163, 184, 0.18)";
-      ctx.fill();
+      ctx.restore();
     }
 
-    // ─── Draw nodes — Obsidian style with soft glow halos ───
+    // ─── 2. Draw Nodes ───
     for (const node of nodes) {
       const color = NODE_COLORS[node.type] || "#71717A";
       const isSelected = node.id === selectedId;
@@ -409,13 +430,31 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         );
       });
 
+      // Highlight local graph search matches
+      const isSearchMatch =
+        graphSearch.trim() !== "" &&
+        node.label.toLowerCase().includes(graphSearch.toLowerCase());
+
+      if (isSearchMatch) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.0;
+        const pulse = 1.0 + Math.sin(frameCountRef.current * 0.12) * 0.16;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r * 1.65 * pulse, 0, Math.PI * 2);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.restore();
+      }
+
       ctx.save();
 
       // Outer glow halo — Obsidian's signature look
-      const haloSize = r * (isFocused ? 3 : 2.2);
+      const haloSize = r * (isFocused ? 3.0 : 2.2);
       const halo = ctx.createRadialGradient(node.x, node.y, r * 0.4, node.x, node.y, haloSize);
-      halo.addColorStop(0, color + (isFocused ? "40" : "18"));
-      halo.addColorStop(0.6, color + "08");
+      halo.addColorStop(0, color + (isFocused ? "3C" : "14"));
+      halo.addColorStop(0.6, color + "07");
       halo.addColorStop(1, color + "00");
       ctx.fillStyle = halo;
       ctx.beginPath();
@@ -433,7 +472,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.0;
         ctx.stroke();
       } else if (isHovered) {
         ctx.fillStyle = color;
@@ -445,7 +484,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         ctx.lineWidth = 1.5;
         ctx.stroke();
       } else {
-        const opacity = isDimmed && !connectedToFocus ? "50" : "DD";
+        const opacity = isDimmed && !connectedToFocus ? "36" : "DD";
         ctx.fillStyle = color + opacity;
         ctx.fill();
         ctx.strokeStyle = "rgba(0,0,0,0.25)";
@@ -460,6 +499,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
       const shouldShowLabel =
         isSelected ||
         isHovered ||
+        isSearchMatch ||
         node.type === "expert" ||
         (!denseGraph && node.type === "company") ||
         (scale > 1.35 && (node.type === "company" || node.type === "industry"));
@@ -484,7 +524,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
       const pr = 4;
 
       ctx.fillStyle = "rgba(8, 10, 14, 0.92)";
-      ctx.strokeStyle = color + (isFocused ? "70" : "30");
+      ctx.strokeStyle = color + (isFocused ? "70" : "2A");
       ctx.lineWidth = 0.6;
       ctx.beginPath();
       ctx.moveTo(px + pr, py);
@@ -500,7 +540,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = isFocused ? "#F8FAFC" : "#A1A1AA";
+      ctx.fillStyle = isFocused ? "#F8FAFC" : isSearchMatch ? color : "#A1A1AA";
       ctx.fillText(labelText, node.x, labelY + 2.5);
       ctx.restore();
 
@@ -518,11 +558,11 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
     }
 
     ctx.restore();
-  }, [dimensions, selectedId]);
+  }, [dimensions, selectedId, graphSearch, activeTypes]);
 
   const settledRef = useRef(true);
 
-  // Main simulation
+  // Main simulation effect
   useEffect(() => {
     simRef.current = computeForceLayout(filteredNodes, filteredEdges, dimensions.width, dimensions.height, selectedId);
 
@@ -533,7 +573,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
       center.pinned = true;
     }
 
-    alphaRef.current = 1;
+    alphaRef.current = 1.0;
     settledRef.current = false;
 
     const iterate = () => {
@@ -550,7 +590,16 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         return;
       }
 
-      stepForceSimulation(nodes, links, dimensions.width, dimensions.height, alpha);
+      stepForceSimulation(
+        nodes, 
+        links, 
+        dimensions.width, 
+        dimensions.height, 
+        alpha,
+        repulsionRef.current,
+        gravityRef.current,
+        springRef.current
+      );
 
       alphaRef.current = alpha * (1 - ALPHA_DECAY);
       renderCanvas();
@@ -563,7 +612,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
     };
   }, [filteredNodes, filteredEdges, dimensions, selectedId, renderCanvas]);
 
-  // Idle animation for flow dots
+  // Idle animation for flow dots when graph settled
   useEffect(() => {
     if (!settledRef.current) return;
     let running = true;
@@ -584,7 +633,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         const n = nodes[i];
         const sx = n.x * scale + tx;
         const sy = n.y * scale + ty;
-        const sr = n.radius * scale * 1.4; // Bigger hit target
+        const sr = n.radius * scale * 1.5; // Bigger hit target
         if (Math.abs(x - sx) < sr && Math.abs(y - sy) < sr) return n;
       }
       return null;
@@ -598,6 +647,8 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
       if (!rect) return;
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
+
+      mouseDownPos.current = { x: e.clientX, y: e.clientY };
 
       const node = getNodeAt(mx, my);
       if (node) {
@@ -658,7 +709,16 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
               }
               const { nodes: ns, links: lk } = simRef.current;
               const a = alphaRef.current;
-              stepForceSimulation(ns, lk, dimensions.width, dimensions.height, a);
+              stepForceSimulation(
+                ns, 
+                lk, 
+                dimensions.width, 
+                dimensions.height, 
+                a,
+                repulsionRef.current,
+                gravityRef.current,
+                springRef.current
+              );
               alphaRef.current = a * (1 - ALPHA_DECAY);
               renderCanvas();
               animRef.current = requestAnimationFrame(reheat);
@@ -681,14 +741,26 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
     [getNodeAt, dimensions, renderCanvas],
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    const dx = e.clientX - mouseDownPos.current.x;
+    const dy = e.clientY - mouseDownPos.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Interactive Tap Selection
+    if (dist < 4 && dragRef.current.nodeId) {
+      const clickedId = dragRef.current.nodeId;
+      if (onSelectNode) {
+        onSelectNode(clickedId === selectedId ? null : clickedId);
+      }
+    }
+
     if (dragRef.current.nodeId) {
       const node = simRef.current.nodeMap.get(dragRef.current.nodeId);
       if (node) node.pinned = true;
     }
     dragRef.current = { nodeId: null };
     isDraggingCanvas.current = false;
-  }, []);
+  }, [onSelectNode, selectedId]);
 
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -743,6 +815,13 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
     setIsFullscreen((v) => !v);
   }, []);
 
+  const toggleTypeFilter = (type: string) => {
+    setActiveTypes((prev) => ({
+      ...prev,
+      [type]: !prev[type],
+    }));
+  };
+
   if (!data || !data.nodes || !data.nodes.length) return null;
 
   // Get connected node names for tooltip
@@ -764,7 +843,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden transition-all duration-500",
+        "flex flex-col overflow-hidden transition-all duration-500 relative",
         isFullscreen ? "fixed inset-4 z-50 bg-zinc-900 border border-zinc-800 rounded-xl" : "",
         !isFullscreen && !hideHeader ? "rounded-xl border border-zinc-800 bg-zinc-900/80 glass-card h-full" : "",
         !isFullscreen && hideHeader ? "bg-transparent border-0 w-full h-full" : "",
@@ -786,6 +865,16 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
           </div>
           <div className="flex items-center gap-1">
             <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className={cn(
+                "p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all cursor-pointer",
+                isSettingsOpen ? "text-amber-400 bg-zinc-800" : ""
+              )}
+              title="Graph filters & physics settings"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={handleResetView}
               className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all cursor-pointer"
               title="Reset view"
@@ -804,6 +893,115 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         </div>
       )}
 
+      {/* Floating Gear Settings Drawer (Obsidian HUD Panel) */}
+      {isSettingsOpen && (
+        <div className="absolute right-3 top-[52px] z-30 w-[240px] rounded-xl border border-zinc-800 bg-zinc-950/94 backdrop-blur-md p-3.5 shadow-2xl text-left animate-scale-in">
+          <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5 mb-2.5">
+            <h4 className="text-[9px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1">
+              <SlidersHorizontal className="w-3 h-3 text-amber-500" />
+              Graph HUD Panel
+            </h4>
+            <button 
+              onClick={() => setIsSettingsOpen(false)} 
+              className="text-zinc-500 hover:text-zinc-100 transition-colors p-0.5 rounded hover:bg-zinc-900 cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+
+          {/* Section 1: Node Search */}
+          <div className="space-y-1.5 mb-3">
+            <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Local Highlight</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Find node by name..."
+                value={graphSearch}
+                onChange={(e) => setGraphSearch(e.target.value)}
+                className="w-full text-[10px] bg-zinc-900/60 border border-zinc-800/80 rounded-md py-1.5 pl-7 pr-2 text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/25 transition-all"
+              />
+              <Search className="absolute left-2.5 top-2 w-3 h-3 text-zinc-600" />
+              {graphSearch && (
+                <button 
+                  onClick={() => setGraphSearch("")} 
+                  className="absolute right-2 top-2 text-zinc-600 hover:text-zinc-400 cursor-pointer"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Section 2: Legend Filters */}
+          <div className="space-y-1.5 mb-3.5">
+            <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Topology Filters</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {NODE_ORDER.map((type) => (
+                <button
+                  key={type}
+                  onClick={() => toggleTypeFilter(type)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 rounded border text-[9px] font-bold uppercase transition-all duration-200 cursor-pointer",
+                    activeTypes[type] 
+                      ? "bg-zinc-900 border-zinc-800 text-zinc-200 shadow-sm"
+                      : "bg-transparent border-transparent text-zinc-600 opacity-60 hover:opacity-100"
+                  )}
+                >
+                  <span 
+                    className="w-1.5 h-1.5 rounded-full shrink-0 shadow-[0_0_6px_currentColor]" 
+                    style={{ 
+                      backgroundColor: activeTypes[type] ? NODE_COLORS[type] : "transparent",
+                      color: NODE_COLORS[type],
+                      border: activeTypes[type] ? "none" : `1px solid ${NODE_COLORS[type]}80`
+                    }} 
+                  />
+                  {NODE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 3: Physics Configuration */}
+          <div className="space-y-2 border-t border-zinc-900/60 pt-2.5">
+            <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Force Parameters</label>
+            
+            {/* Repulsion Slider */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[8px] text-zinc-400">
+                <span>REPULSION</span>
+                <span className="font-mono text-zinc-500">{simParams.repulsion}</span>
+              </div>
+              <input
+                type="range"
+                min="500"
+                max="4500"
+                step="100"
+                value={simParams.repulsion}
+                onChange={(e) => setSimParams(prev => ({ ...prev, repulsion: parseInt(e.target.value) }))}
+                className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+            </div>
+
+            {/* Link Spring Slider */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[8px] text-zinc-400">
+                <span>SPRING LENGTH</span>
+                <span className="font-mono text-zinc-500">{simParams.spring}px</span>
+              </div>
+              <input
+                type="range"
+                min="50"
+                max="200"
+                step="5"
+                value={simParams.spring}
+                onChange={(e) => setSimParams(prev => ({ ...prev, spring: parseInt(e.target.value) }))}
+                className="w-full h-1 bg-zinc-900 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="sr-only" aria-live="polite">
         Interactive expert network graph containing {data.nodes.length} nodes and {data.edges.length} edges.
         {selectedId ? `Currently highlighting connections for expert ${selectedId}.` : "Displaying entire query discovery graph."}
@@ -813,13 +1011,27 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
         className="relative flex-1 overflow-hidden cursor-grab active:cursor-grabbing"
         ref={containerRef}
       >
+        {/* Settings button when header is hidden */}
+        {hideHeader && (
+          <button
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            className={cn(
+              "absolute left-3 top-3 z-30 p-1.5 rounded-lg border border-zinc-800/80 bg-zinc-950/80 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-all cursor-pointer backdrop-blur-md shadow-md",
+              isSettingsOpen ? "text-amber-400 bg-zinc-800 border-amber-500/20" : ""
+            )}
+            title="Graph HUD Panel"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         <canvas
           ref={canvasRef}
           className="w-full h-full"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={() => { handleMouseUp(); setTooltipNode(null); hoveredRef.current = null; renderCanvas(); }}
+          onMouseLeave={() => { handleMouseUp(null as any); setTooltipNode(null); hoveredRef.current = null; renderCanvas(); }}
           onDoubleClick={handleDoubleClick}
         />
 
@@ -857,7 +1069,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader }: KnowledgeGraphVizPr
 
         {/* Controls hint */}
         <div className="absolute right-2 top-2 rounded-md border border-zinc-800/50 bg-zinc-950/60 px-2 py-0.5 text-[8px] font-semibold text-zinc-600 backdrop-blur-md select-none">
-          Drag · Scroll
+          Click · Drag · Scroll
         </div>
       </div>
 

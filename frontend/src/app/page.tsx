@@ -86,10 +86,39 @@ export default function HomePage() {
     }
   };
 
+  const handleSelectNode = (nodeId: string | null) => {
+    if (nodeId) {
+      const isExpert = searchResults?.results.some((e) => e.id === nodeId);
+      if (isExpert) {
+        setSelectedExpertId(nodeId);
+        setTimeout(() => {
+          const element = document.getElementById(`expert-card-${nodeId}`);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 80);
+      } else {
+        setSelectedExpertId(nodeId);
+      }
+    } else {
+      setSelectedExpertId(null);
+    }
+  };
+
   const renderedResults = useMemo(
     () =>
       (searchResults?.results ?? []).map((expert: ExpertResult, i: number) => (
-        <div key={expert.id} onClick={() => setSelectedExpertId(expert.id)} className={`cursor-pointer transition-all duration-300 ${selectedExpertId === expert.id ? 'ring-2 ring-red-500/50 rounded-2xl scale-[1.02] shadow-xl shadow-red-500/10' : 'hover:scale-[1.01]'}`}>
+        <div
+          key={expert.id}
+          id={`expert-card-${expert.id}`}
+          onClick={() => setSelectedExpertId(expert.id)}
+          className={cn(
+            "cursor-pointer rounded-xl transition-all duration-200",
+            selectedExpertId === expert.id
+              ? "ring-2 ring-red-500/50 shadow-lg shadow-red-500/10"
+              : "hover:ring-1 hover:ring-zinc-700/70",
+          )}
+        >
           <ExpertCard expert={expert} rank={i + 1} />
         </div>
       )),
@@ -100,7 +129,12 @@ export default function HomePage() {
   const hasGraphData = searchResults?.graph_data && searchResults.graph_data.nodes.length > 0;
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-[#08090b] font-sans text-zinc-100">
+    <div className="relative flex min-h-screen flex-col bg-[#08090b] font-sans text-zinc-100 overflow-x-hidden">
+      {/* Decorative premium HSL ambient glow blobs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-red-950/8 blur-[120px] pointer-events-none z-0" />
+      <div className="absolute bottom-[20%] right-[-10%] w-[45%] h-[45%] rounded-full bg-amber-950/6 blur-[120px] pointer-events-none z-0" />
+      <div className="absolute top-[40%] right-[15%] w-[35%] h-[35%] rounded-full bg-purple-950/4 blur-[140px] pointer-events-none z-0" />
+
       <div className="fixed inset-0 pointer-events-none z-0 bg-[linear-gradient(to_bottom,#08090b_0%,#0d0e12_45%,#08090b_100%)]" />
       <div className="fixed inset-0 pointer-events-none z-0 dot-grid opacity-[0.025]" />
 
@@ -225,8 +259,8 @@ export default function HomePage() {
 
         {/* ─── Compact Inline Search Bar (results mode) ─── */}
         {hasResults && (
-          <section className="z-30 w-full border-b border-zinc-900/80 bg-zinc-950/70 px-3 py-1.5 backdrop-blur-xl transition-all duration-300 sm:px-4">
-            <div className="max-w-[680px] mx-auto w-full relative z-10">
+          <section className="z-30 w-full border-b border-zinc-900/80 bg-zinc-950/78 px-3 py-1 backdrop-blur-xl transition-all duration-300 sm:px-4">
+            <div className="max-w-[620px] mx-auto w-full relative z-10">
               <SearchBar onSearch={handleSearch} isLoading={searchLoading} variant="compact" />
             </div>
           </section>
@@ -268,10 +302,10 @@ export default function HomePage() {
 
         {/* ─── Results: 2-Column Layout (List Left, Graphs Right) ─── */}
         {searchResults && (
-          <section className="max-w-[1440px] mx-auto px-3 sm:px-4 pb-16 mt-3 animate-fade-in relative z-10 w-full flex-grow flex flex-col items-center justify-start">
+          <section className="max-w-[1440px] mx-auto px-3 sm:px-4 pb-16 mt-2 animate-fade-in relative z-10 w-full flex-grow flex flex-col items-center justify-start">
 
             {/* Mobile Tab Switcher */}
-            <div className="sticky top-[76px] z-20 flex lg:hidden w-full max-w-[560px] mx-auto mb-4 p-0.5 rounded-lg bg-zinc-950/92 border border-zinc-800 backdrop-blur-md shadow-xl shadow-black/30">
+            <div className="sticky top-[72px] z-20 flex lg:hidden w-full max-w-[560px] mx-auto mb-3 p-0.5 rounded-lg bg-zinc-950/95 border border-zinc-800 backdrop-blur-md shadow-xl shadow-black/30">
               <button
                 onClick={() => setResultsTab("list")}
                 className={cn(
@@ -314,7 +348,7 @@ export default function HomePage() {
 
               {/* ─── Left Column: Summary + Expert Cards ─── */}
               <div className={cn(
-                "space-y-4 min-w-0 text-left flex flex-col items-start justify-start w-full",
+                "space-y-3 min-w-0 text-left flex flex-col items-start justify-start w-full",
                 resultsTab === "list" ? "block" : "hidden lg:block"
               )}>
                 {searchResults.executive_summary && (
@@ -328,7 +362,7 @@ export default function HomePage() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3 w-full">
+                <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2.5 w-full">
                   <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold text-zinc-100 tracking-tight">
                       Curated Pipeline
@@ -343,7 +377,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 animate-stagger w-full">
+                <div className="grid gap-2.5 animate-stagger w-full">
                   {renderedResults}
                 </div>
               </div>
@@ -372,7 +406,7 @@ export default function HomePage() {
                       </div>
                       <div className="flex-grow min-h-0 relative">
                         <div className="absolute inset-0 w-full h-full">
-                          <KnowledgeGraphViz data={searchResults.graph_data!} selectedId={selectedExpertId} hideHeader />
+                          <KnowledgeGraphViz data={searchResults.graph_data!} selectedId={selectedExpertId} onSelectNode={handleSelectNode} hideHeader />
                         </div>
                       </div>
                     </div>
@@ -411,7 +445,7 @@ export default function HomePage() {
                 resultsTab === "graph2d" ? "block" : "hidden"
               )}>
                 {hasGraphData && (
-                  <KnowledgeGraphViz data={searchResults.graph_data!} selectedId={selectedExpertId} />
+                  <KnowledgeGraphViz data={searchResults.graph_data!} selectedId={selectedExpertId} onSelectNode={handleSelectNode} />
                 )}
               </div>
 

@@ -17,7 +17,7 @@ export default function ExecutiveSummary({
 
   return (
     <div
-      className="relative glass-card backdrop-blur-sm rounded-xl border border-red-500/20 overflow-hidden shadow-md red-glow transition-all duration-300"
+      className="relative overflow-hidden rounded-xl border border-red-500/20 bg-zinc-950/90 shadow-md shadow-red-950/10 backdrop-blur-sm transition-all duration-300"
       id="executive-summary"
     >
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-40" />
@@ -47,7 +47,7 @@ export default function ExecutiveSummary({
               <button
                 type="button"
                 onClick={onShowAll}
-                className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-400 transition hover:border-red-500/30 hover:text-red-300"
+                className="hidden rounded-md border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-400 transition hover:border-red-500/30 hover:text-red-300 sm:inline-flex"
               >
                 Show all
               </button>
@@ -56,7 +56,7 @@ export default function ExecutiveSummary({
         </div>
 
         <div className="mt-3 overflow-hidden">
-          <div className="text-[13px] text-zinc-300 font-medium leading-relaxed break-words whitespace-pre-wrap">
+          <div className="text-[13px] text-zinc-200 font-medium leading-relaxed break-words whitespace-pre-wrap sm:text-[14px]">
             {summary}
           </div>
 
@@ -88,7 +88,7 @@ export default function ExecutiveSummary({
                     </span>
                   ))}
                 {typeof queryAnalysis.intent === "string" && (
-                  <span className="px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded-md text-[10px] font-bold border border-zinc-700 flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-zinc-900 text-zinc-300 rounded-md text-[10px] font-bold border border-zinc-700 flex items-center gap-1">
                     <span className="text-zinc-500 font-medium">Intent:</span> {queryAnalysis.intent}
                   </span>
                 )}

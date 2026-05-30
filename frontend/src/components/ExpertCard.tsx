@@ -105,8 +105,8 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
   return (
     <div
       className={cn(
-        "group relative rounded-xl border glass-card shadow-md backdrop-blur-sm overflow-hidden",
-        "hover:border-red-500/30 hover:shadow-lg hover:shadow-red-500/5 hover:-translate-y-[1px]",
+        "group relative rounded-xl border border-zinc-800/85 bg-zinc-950/88 shadow-md backdrop-blur-sm overflow-hidden",
+        "hover:border-red-500/30 hover:bg-zinc-950 hover:shadow-lg hover:shadow-red-500/5",
         "transition-all duration-300"
       )}
       id={`expert-card-${expert.id}`}
@@ -123,7 +123,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
             "p-1.5 rounded-lg border transition-all duration-200",
             bookmarked
               ? "bg-red-500/10 border-red-500/20 text-red-400"
-              : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/10",
+              : "bg-zinc-900 border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/10",
             bookmarkLoading ? "opacity-50 cursor-wait" : "cursor-pointer"
           )}
           title={bookmarked ? "Remove bookmark" : "Bookmark expert"}
@@ -138,7 +138,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {rank != null && (
-              <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-800/80 px-1.5 py-0.5 rounded-md border border-zinc-700 shrink-0">
+              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-900 px-1.5 py-0.5 rounded-md border border-zinc-700 shrink-0">
                 #{rank}
               </span>
             )}
@@ -185,7 +185,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
         {/* Company + Industry */}
         <p className="text-xs text-zinc-400 flex items-center gap-1.5 flex-wrap">
           <Building2 className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-          <span className="text-zinc-200 font-semibold">{expert.company}</span>
+          <span className="text-zinc-100 font-semibold">{expert.company}</span>
           {expert.industry && (
             <>
               <span className="text-zinc-600">·</span>
@@ -197,13 +197,13 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
         {/* Tags row: Seniority + Experience + Availability */}
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           {expert.seniority && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded-md text-[10px] font-bold border border-zinc-700">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-900 text-zinc-300 rounded-md text-[10px] font-bold border border-zinc-700">
               <Star className="w-3 h-3 text-red-400" />
               {expert.seniority}
             </span>
           )}
           {expert.years_experience != null && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded-md border border-zinc-700">
               {expert.years_experience} yrs
             </span>
           )}
@@ -239,7 +239,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
               </span>
             ))}
             {!expanded && expert.topics.length > 3 && (
-              <span className="px-1.5 py-0.5 text-zinc-400 font-semibold text-[10px] bg-zinc-800 rounded-md border border-zinc-700">
+              <span className="px-1.5 py-0.5 text-zinc-400 font-semibold text-[10px] bg-zinc-900 rounded-md border border-zinc-700">
                 +{expert.topics.length - 3}
               </span>
             )}
@@ -275,7 +275,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
                   "px-3 py-1.5 rounded-full border",
                   expanded
                     ? "bg-red-500/10 text-red-300 border-red-500/20"
-                    : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-zinc-600"
+                    : "bg-zinc-900 text-zinc-300 border-zinc-700 hover:border-zinc-600"
                 )}
                 id={`reasoning-toggle-${expert.id}`}
               >
@@ -331,7 +331,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
                 <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
                   Publications
                 </h4>
-                <div className="bg-zinc-800/60 border border-zinc-700 rounded-lg p-2.5">
+                <div className="bg-zinc-900/80 border border-zinc-700 rounded-lg p-2.5">
                   <ul className="space-y-1.5">
                     {expert.publications.map((pub, i) => (
                       <li key={i} className="text-xs text-zinc-300 font-medium pl-2.5 border-l-2 border-red-500/30 break-words">

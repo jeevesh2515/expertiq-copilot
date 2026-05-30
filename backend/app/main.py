@@ -183,10 +183,11 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS ──
+frontend_url = settings.FRONTEND_URL.rstrip("/")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        settings.FRONTEND_URL,
+        frontend_url,
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",

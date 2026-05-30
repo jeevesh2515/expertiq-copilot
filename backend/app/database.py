@@ -25,39 +25,66 @@ engine_kwargs = {
     "echo": False,
 }
 
-if db_url and db_url.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
-else:
-    engine_kwargs["pool_size"] = 10
-    engine_kwargs["max_overflow"] = 20
-    engine_kwargs["pool_recycle"] = 3600
-    engine_kwargs["pool_pre_ping"] = True
+import os
 
-# Safe creation of engine to prevent import-time crashes if DATABASE_URL is missing or invalid.
-# Falls back gracefully to an in-memory SQLite database so that the app can still boot
-# and respond to healthcheck probes.
-try:
-    if not db_url or "CHANGE_ME" in db_url:
-        raise ValueError("Invalid or default placeholder DATABASE_URL")
+# Set fallback database path (persistent local SQLite file)
+fallback_db_path = "/app/data/expertiq.db" if os.path.exists("/app/data") else "./expertiq.db"
+fallback_db_url = f"sqlite:///{fallback_db_path}"
+
+use_fallback = False
+
+# 1. Check if the database URL is missing or has defaults
+if not db_url or "CHANGE_ME" in db_url:
+    print("WARNING: DATABASE_URL has default/missing values. Using SQLite fallback.", file=sys.stderr)
+    use_fallback = True
+
+# 2. Check if we are running in a production container but pointing to localhost
+elif "localhost" in db_url or "127.0.0.1" in db_url or "[::1]" in db_url:
+    is_production_container = (
+        os.environ.get("PORT") is not None or
+        os.environ.get("RAILWAY_STATIC_URL") is not None or
+        os.environ.get("RAILWAY_ENVIRONMENT") is not None or
+        settings.APP_ENV == "production"
+    )
+    if is_production_container:
+        print("WARNING: Production environment detected with a localhost DATABASE_URL. Forcing SQLite fallback.", file=sys.stderr)
+        use_fallback = True
+
+# 3. Test active connection if it's external PostgreSQL
+if not use_fallback and not db_url.startswith("sqlite"):
+    try:
+        engine_kwargs["pool_size"] = 10
+        engine_kwargs["max_overflow"] = 20
+        engine_kwargs["pool_recycle"] = 3600
+        engine_kwargs["pool_pre_ping"] = True
+        
+        test_engine = create_engine(db_url, **engine_kwargs)
+        # Force a quick connection test
+        with test_engine.connect() as conn:
+            pass
+        engine = test_engine
+        print(f"✓ Connected to database successfully: {db_url.split('@')[-1] if '@' in db_url else db_url}")
+    except Exception as e:
+        print(
+            f"WARNING: PostgreSQL connection failed ({e}). "
+            f"Falling back to persistent SQLite database for production safety.",
+            file=sys.stderr
+        )
+        use_fallback = True
+
+# 4. Fallback implementation if PostgreSQL check failed
+if use_fallback or db_url.startswith("sqlite"):
+    db_url = fallback_db_url
+    connect_args["check_same_thread"] = False
+    # Use StaticPool to ensure database connections behave correctly in multi-threaded Uvicorn
+    from sqlalchemy.pool import StaticPool
     engine = create_engine(
         db_url,
         connect_args=connect_args,
-        **engine_kwargs
+        poolclass=StaticPool,
+        echo=False
     )
-except Exception as e:
-    print(
-        f"WARNING: SQLAlchemy engine creation failed ({e}). "
-        f"Falling back to safe in-memory SQLite database for liveness.",
-        file=sys.stderr
-    )
-    db_url = "sqlite:///:memory:"
-    connect_args = {"check_same_thread": False}
-    engine_kwargs = {"echo": False, "poolclass": StaticPool}
-    engine = create_engine(
-        db_url,
-        connect_args=connect_args,
-        **engine_kwargs
-    )
+    print(f"✓ Database fallback active. Using persistent SQLite file: {db_url}")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

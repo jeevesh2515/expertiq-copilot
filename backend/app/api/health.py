@@ -42,3 +42,53 @@ async def health_check() -> Dict[str, object]:
             "index_prewarm_enabled": settings.PREWARM_LIGHTWEIGHT_INDEX,
         },
     }
+
+@router.get(
+    "/api/debug-db",
+    summary="Secure database diagnostics check",
+    response_model=Dict[str, object],
+)
+async def debug_db() -> Dict[str, object]:
+    """
+    Secure database diagnostics endpoint to inspect connectivity status
+    and configuration settings on the backend container.
+    """
+    import os
+    from sqlalchemy import text
+    from app.database import SessionLocal, db_url
+
+    # Redact password in DB URL for safety
+    redacted_url = None
+    if db_url:
+        if "@" in db_url:
+            parts = db_url.split("@")
+            prefix = parts[0]
+            if ":" in prefix:
+                subparts = prefix.split(":")
+                # Keep scheme, redact password
+                redacted_url = f"{subparts[0]}:{subparts[1]}:REDACTED@{parts[1]}"
+            else:
+                redacted_url = f"REDACTED@{parts[1]}"
+        else:
+            redacted_url = db_url
+
+    db_status = "unknown"
+    error_msg = None
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db_status = "connected"
+        db.close()
+    except Exception as e:
+        db_status = "error"
+        error_msg = str(e)
+
+    return {
+        "db_url": redacted_url,
+        "db_status": db_status,
+        "error": error_msg,
+        "app_env": os.environ.get("APP_ENV"),
+        "settings_app_env": settings.APP_ENV,
+        "database_url_env_present": "DATABASE_URL" in os.environ,
+    }
+

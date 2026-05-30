@@ -148,7 +148,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.warning(f"⚠ Knowledge graph build deferred: {e}")
         else:
             logger.info("✓ Knowledge graph disabled for low-memory local mode.")
-
+    except Exception as db_err:
+        logger.error(f"❌ Database initialization or seeding deferred: {db_err}")
+        logger.info("Proceeding with server startup. Database operations will retry on demand.")
     finally:
         if db:
             db.close()

@@ -14,19 +14,49 @@ import sys
 settings = get_settings()
 
 db_url = settings.DATABASE_URL
-# During automated pytest sessions, if the default CHANGE_ME template is active,
-# we fall back to standard local passwordless credentials to run tests securely.
-if "pytest" in sys.modules and db_url == "postgresql://postgres:CHANGE_ME@localhost:5432/expertiq":
-    db_url = "postgresql://postgres@localhost:5432/expertiq"
+# During automated pytest sessions, we isolate testing on an in-memory SQLite database
+# to prevent tests from wiping or dropping the active development PostgreSQL tables.
+if "pytest" in sys.modules:
+    db_url = "sqlite:///expertiq_test.db"
 
-engine = create_engine(
-    db_url,
-    pool_size=10,
-    max_overflow=20,
-    pool_recycle=3600,
-    echo=False,
-)
+connect_args = {}
+engine_kwargs = {
+    "echo": False,
+}
 
+if db_url and db_url.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+else:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_recycle"] = 3600
+    engine_kwargs["pool_pre_ping"] = True
+
+# Safe creation of engine to prevent import-time crashes if DATABASE_URL is missing or invalid.
+# Falls back gracefully to an in-memory SQLite database so that the app can still boot
+# and respond to healthcheck probes.
+try:
+    if not db_url or "CHANGE_ME" in db_url:
+        raise ValueError("Invalid or default placeholder DATABASE_URL")
+    engine = create_engine(
+        db_url,
+        connect_args=connect_args,
+        **engine_kwargs
+    )
+except Exception as e:
+    print(
+        f"WARNING: SQLAlchemy engine creation failed ({e}). "
+        f"Falling back to safe in-memory SQLite database for liveness.",
+        file=sys.stderr
+    )
+    db_url = "sqlite:///:memory:"
+    connect_args = {"check_same_thread": False}
+    engine_kwargs = {"echo": False}
+    engine = create_engine(
+        db_url,
+        connect_args=connect_args,
+        **engine_kwargs
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

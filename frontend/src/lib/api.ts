@@ -325,11 +325,18 @@ export interface ApiErrorLike {
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   const apiError = error as ApiErrorLike;
   const detail = apiError.response?.data;
+  const status = apiError.response?.status;
 
   if (typeof detail === "string" && detail.trim()) return detail;
   if (detail && typeof detail === "object" && typeof detail.detail === "string") {
+    if (status === 500 && detail.detail === "An unexpected error occurred. Please try again.") {
+      return "The authentication service is reachable but could not complete the request. Please check the backend database configuration.";
+    }
     return detail.detail;
   }
+
+  if (status === 408) return "The backend did not respond in time. Please retry in a moment.";
+  if (status === 500) return "The backend returned an internal error. Please check the deployment logs.";
 
   return apiError.message || fallback;
 }

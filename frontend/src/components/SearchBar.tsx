@@ -13,13 +13,14 @@ import type { SearchFilters } from "@/lib/api";
 interface SearchBarProps {
   onSearch: (query: string, filters?: SearchFilters) => void;
   isLoading?: boolean;
+  variant?: "hero" | "compact";
 }
 
 const INDUSTRIES = ["FinTech", "HealthTech", "Climate Tech", "EdTech", "RegTech"];
 const SENIORITIES = ["C-Suite", "VP", "Director", "Partner", "Professor"];
 const AVAILABILITIES = ["available", "limited"];
 
-export default function SearchBar({ onSearch, isLoading = false }: SearchBarProps) {
+export default function SearchBar({ onSearch, isLoading = false, variant = "hero" }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [industry, setIndustry] = useState("");
@@ -65,21 +66,26 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
   };
 
   const activeFilterCount = [industry, seniority, availability].filter(Boolean).length;
+  const isCompact = variant === "compact";
 
   return (
-    <div className="w-full max-w-[800px] mx-auto relative z-20 flex flex-col items-center justify-center" id="search-bar">
+    <div className={cn(
+      "mx-auto relative z-20 flex w-full flex-col items-center justify-center",
+      isCompact ? "max-w-[680px]" : "max-w-[800px]",
+    )} id="search-bar">
       <form role="search" onSubmit={handleSubmit} className="relative w-full flex flex-col items-center justify-center">
         <div className="relative group max-w-[850px] mx-auto w-full">
           <div
             className={cn(
-              "relative flex items-center rounded-[32px] transition-all duration-300",
-              "bg-zinc-900 border",
+              "relative flex items-center rounded-[20px] transition-all duration-300 sm:rounded-[24px]",
+              isCompact ? "min-h-[40px] sm:min-h-[44px]" : "min-h-[64px]",
+              "bg-zinc-950 border",
               isFocused
                 ? "border-red-500/50 shadow-[0_0_30px_rgba(220,38,38,0.1)]"
                 : "border-zinc-800 shadow-[0_4px_20px_rgba(0,0,0,0.3)]"
             )}
           >
-            <div className="pl-6 pr-3 flex-shrink-0">
+            <div className="pl-4 pr-2 sm:pl-6 sm:pr-3 flex-shrink-0">
               <Search
                 className={cn(
                   "w-5 h-5 transition-colors duration-300",
@@ -94,15 +100,18 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="Find experts in semiconductor supply chain with buy-side banking experience..."
-              className="flex-1 min-w-0 bg-transparent text-zinc-100 placeholder-zinc-600 py-4 sm:py-5 text-[15px] outline-none"
+              placeholder="Search experts, industries, topics, or companies..."
+              className={cn(
+                "flex-1 min-w-0 bg-transparent text-zinc-100 outline-none placeholder:text-zinc-600",
+                isCompact ? "py-2 text-[13px] sm:py-2.5" : "py-4 text-[15px] sm:py-5",
+              )}
               disabled={isLoading}
               maxLength={500}
               id="search-input"
               aria-label="Search experts"
             />
 
-            <div className="flex items-center gap-2 pr-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 pr-2 sm:gap-2 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setShowFilters(!showFilters)}
@@ -110,6 +119,7 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
                 aria-label="Toggle search filters"
                 className={cn(
                   "relative p-2.5 rounded-xl transition-all duration-200",
+                  isCompact && "p-2",
                   showFilters || activeFilterCount > 0
                     ? "bg-red-500/10 text-red-400"
                     : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
@@ -130,7 +140,8 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
                   disabled={isLoading || !query.trim() || query.trim().length < 3}
                   aria-label="Search"
                   className={cn(
-                    "relative flex items-center justify-center min-w-[110px] h-[48px] rounded-full font-semibold text-[15px]",
+                    "relative flex min-w-10 items-center justify-center rounded-full px-3 font-semibold sm:min-w-[90px]",
+                    isCompact ? "h-8 text-[12px] sm:h-9" : "h-12 text-[15px]",
                     "bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400",
                     "text-white disabled:opacity-50 disabled:cursor-not-allowed",
                     "transition-all duration-200 shadow-lg shadow-red-500/20"
@@ -140,7 +151,10 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
                   {isLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    <span>Search</span>
+                    <>
+                      <span className="hidden sm:inline">Search</span>
+                      <Search className="h-5 w-5 sm:hidden" />
+                    </>
                   )}
                 </button>
               </div>
@@ -148,25 +162,27 @@ export default function SearchBar({ onSearch, isLoading = false }: SearchBarProp
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-2.5 mt-5">
-          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mr-1">Try:</span>
-          {["AI ethics in healthcare", "renewable energy financing", "semiconductor supply chain"].map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => {
-                setQuery(suggestion);
-                onSearch(suggestion);
-              }}
-              className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-zinc-900/40 border border-zinc-800/80 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
+        {!isCompact && (
+          <div className="mt-5 flex flex-wrap items-center justify-start gap-2.5 sm:justify-center">
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mr-1">Try:</span>
+            {["AI ethics in healthcare", "renewable energy financing", "semiconductor supply chain"].map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => {
+                  setQuery(suggestion);
+                  onSearch(suggestion);
+                }}
+                className="rounded-full border border-zinc-800/80 bg-zinc-950 px-3.5 py-1.5 text-xs font-semibold text-zinc-400 transition-all duration-300 hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-300 active:scale-[0.98]"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
 
         {showFilters && (
-          <div className="absolute top-full left-0 right-0 z-30 p-5 mt-3 bg-zinc-900 rounded-2xl shadow-xl border border-zinc-800 animate-fade-in">
+          <div className="absolute left-0 right-0 top-full z-30 mt-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-xl animate-fade-in">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
               <span className="text-sm font-bold text-zinc-100 uppercase tracking-wider">
                 Search Filters

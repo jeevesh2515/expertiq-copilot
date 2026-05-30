@@ -7,6 +7,7 @@ request-scoped database sessions via FastAPI dependency injection.
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 
@@ -51,7 +52,7 @@ except Exception as e:
     )
     db_url = "sqlite:///:memory:"
     connect_args = {"check_same_thread": False}
-    engine_kwargs = {"echo": False}
+    engine_kwargs = {"echo": False, "poolclass": StaticPool}
     engine = create_engine(
         db_url,
         connect_args=connect_args,

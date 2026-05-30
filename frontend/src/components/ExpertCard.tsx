@@ -22,11 +22,56 @@ interface ExpertCardProps {
   onBookmarkToggle?: (expertId: string, bookmarked: boolean) => void;
 }
 
-function getMatchScoreColor(score: number) {
-  if (score >= 80) return { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" };
-  if (score >= 60) return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" };
-  return { text: "text-zinc-400", bg: "bg-zinc-800", border: "border-zinc-700" };
+/* Radial score ring (tiny SVG donut) */
+function ScoreRing({ value, max, color, label }: { value: number; max: number; color: string; label: string }) {
+  const size = 36;
+  const strokeWidth = 3;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.min(value / max, 1);
+  const dashOffset = circumference * (1 - progress);
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 group/ring">
+      <svg width={size} height={size} className="transform -rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(63, 63, 70, 0.5)"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          strokeLinecap="round"
+          className="transition-all duration-700 ease-out"
+          style={{ filter: `drop-shadow(0 0 4px ${color}40)` }}
+        />
+      </svg>
+      <span className="text-[9px] font-black uppercase tracking-wider text-zinc-500 group-hover/ring:text-zinc-300 transition-colors">{label}</span>
+    </div>
+  );
 }
+
+function getMatchTier(score: number): "high" | "mid" | "low" {
+  if (score >= 80) return "high";
+  if (score >= 60) return "mid";
+  return "low";
+}
+
+const TIER_ACCENT = {
+  high: "from-red-500 to-red-400",
+  mid: "from-amber-500 to-amber-400",
+  low: "from-zinc-600 to-zinc-500",
+};
 
 function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -36,10 +81,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
   const matchScore = typeof expert.match_score === "number" ? expert.match_score : null;
   const vectorScore = typeof expert.vector_score === "number" ? expert.vector_score : null;
   const llmScore = typeof expert.llm_score === "number" ? expert.llm_score : null;
-  const matchColors = useMemo(
-    () => (matchScore !== null ? getMatchScoreColor(matchScore) : null),
-    [matchScore]
-  );
+  const tier = useMemo(() => matchScore !== null ? getMatchTier(matchScore) : "low", [matchScore]);
 
   const handleBookmark = async () => {
     setBookmarkLoading(true);
@@ -63,18 +105,22 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border glass-card shadow-lg backdrop-blur-sm",
-        "hover:border-red-500/30 hover:shadow-xl hover:shadow-red-500/5 hover:-translate-y-[2px]",
+        "group relative rounded-xl border glass-card shadow-md backdrop-blur-sm overflow-hidden",
+        "hover:border-red-500/30 hover:shadow-lg hover:shadow-red-500/5 hover:-translate-y-[1px]",
         "transition-all duration-300"
       )}
       id={`expert-card-${expert.id}`}
     >
-      <div className="absolute top-4 right-4 z-10">
+      {/* Left accent bar — indicates match tier */}
+      <div className={cn("absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b", TIER_ACCENT[tier])} />
+
+      {/* Bookmark button */}
+      <div className="absolute top-3 right-3 z-10">
         <button
           onClick={handleBookmark}
           disabled={bookmarkLoading}
           className={cn(
-            "p-2 rounded-xl border transition-all duration-200",
+            "p-1.5 rounded-lg border transition-all duration-200",
             bookmarked
               ? "bg-red-500/10 border-red-500/20 text-red-400"
               : "bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-500/20 hover:bg-red-500/10",
@@ -83,98 +129,88 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
           title={bookmarked ? "Remove bookmark" : "Bookmark expert"}
           id={`bookmark-${expert.id}`}
         >
-          <Heart className={cn("w-4 h-4", bookmarked && "fill-red-400")} />
+          <Heart className={cn("w-3.5 h-3.5", bookmarked && "fill-red-400")} />
         </button>
       </div>
 
-      <div className="p-5 sm:p-6">
-        {rank != null && (
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
-              Rank #{rank}
-            </span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-5 flex-wrap pr-12">
-          {matchScore !== null && matchColors && (
-            <div
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full border",
-                matchColors.bg, matchColors.border
-              )}
-            >
-              <span className={cn("text-sm font-bold", matchColors.text)}>
-                {Math.round(matchScore)}
+      <div className="pl-4 pr-3 py-3 sm:pl-5 sm:pr-4 sm:py-4">
+        {/* Top row: Rank + Score Rings */}
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {rank != null && (
+              <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-800/80 px-1.5 py-0.5 rounded-md border border-zinc-700 shrink-0">
+                #{rank}
               </span>
-              <span className={cn("text-[10px] font-bold uppercase tracking-wider", matchColors.text, "opacity-80")}>
-                Match
-              </span>
-            </div>
-          )}
-
-          {vectorScore !== null && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Semantic</span>
-              <span className="text-sm font-bold text-amber-300">
-                {vectorScore.toFixed(1)}
-              </span>
-            </div>
-          )}
-
-          {llmScore !== null && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 flex-shrink-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">AI Judge</span>
-              <span className="text-sm font-bold text-red-300">
-                {Math.round(llmScore)}<span className="text-red-400/60 text-xs">/10</span>
-              </span>
-            </div>
-          )}
-
-          {matchScore === null && vectorScore === null && llmScore === null && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 border border-zinc-700">
-              <BookmarkIcon className="w-4 h-4 text-zinc-500" />
-              <span className="text-xs font-medium text-zinc-400">No scores available</span>
-            </div>
-          )}
-        </div>
-
-        <div className="min-w-0">
-          <h3 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight truncate group-hover:text-red-300 transition-colors">
-            {expert.name}
-          </h3>
-          <p className="text-sm font-medium text-zinc-400 flex items-center gap-1.5 mt-1">
-            <GraduationCap className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-            <span className="truncate">{expert.title}</span>
-          </p>
-          <p className="text-sm text-zinc-400 flex items-center gap-1.5 mt-1 flex-wrap">
-            <Building2 className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-            <span className="text-zinc-200 font-semibold">{expert.company}</span>
-            {expert.industry && (
-              <>
-                <span className="text-zinc-600">·</span>
-                <span>{expert.industry}</span>
-              </>
             )}
-          </p>
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-[15px] font-bold text-zinc-100 tracking-tight truncate group-hover:text-red-300 transition-colors leading-tight">
+                {expert.name}
+              </h3>
+              <p className="text-xs text-zinc-400 flex items-center gap-1 mt-0.5 truncate">
+                <GraduationCap className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+                <span className="truncate">{expert.title}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Score rings cluster */}
+          <div className="flex items-center gap-2 shrink-0 pr-6">
+            {matchScore !== null && (
+              <div className="relative">
+                <ScoreRing value={matchScore} max={100} color="#EF4444" label="Match" />
+                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-zinc-100 -mt-2">
+                  {Math.round(matchScore)}
+                </span>
+              </div>
+            )}
+            {vectorScore !== null && (
+              <div className="relative hidden sm:block">
+                <ScoreRing value={vectorScore * 10} max={100} color="#F59E0B" label="Semantic" />
+                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-zinc-100 -mt-2">
+                  {vectorScore.toFixed(1)}
+                </span>
+              </div>
+            )}
+            {llmScore !== null && (
+              <div className="relative hidden sm:block">
+                <ScoreRing value={llmScore * 10} max={100} color="#A78BFA" label="AI" />
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-zinc-100 -mt-2">
+                  {Math.round(llmScore)}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-4">
+        {/* Company + Industry */}
+        <p className="text-xs text-zinc-400 flex items-center gap-1.5 flex-wrap">
+          <Building2 className="w-3 h-3 text-zinc-500 flex-shrink-0" />
+          <span className="text-zinc-200 font-semibold">{expert.company}</span>
+          {expert.industry && (
+            <>
+              <span className="text-zinc-600">·</span>
+              <span>{expert.industry}</span>
+            </>
+          )}
+        </p>
+
+        {/* Tags row: Seniority + Experience + Availability */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-2">
           {expert.seniority && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 bg-zinc-800 text-zinc-300 rounded-lg text-xs font-bold border border-zinc-700">
-              <Star className="w-3.5 h-3.5 text-red-400" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded-md text-[10px] font-bold border border-zinc-700">
+              <Star className="w-3 h-3 text-red-400" />
               {expert.seniority}
             </span>
           )}
           {expert.years_experience != null && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-300 bg-zinc-800 px-2.5 sm:px-3 py-1 rounded-lg border border-zinc-700">
-              {expert.years_experience} yrs exp
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
+              {expert.years_experience} yrs
             </span>
           )}
           {expert.availability && (
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold border",
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border",
                 expert.availability === "available"
                   ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                   : "text-amber-400 bg-amber-500/10 border-amber-500/20"
@@ -182,7 +218,7 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
             >
               <span
                 className={cn(
-                  "w-2 h-2 rounded-full animate-pulse-soft",
+                  "w-1.5 h-1.5 rounded-full animate-pulse-soft",
                   expert.availability === "available" ? "bg-emerald-400" : "bg-amber-400"
                 )}
               />
@@ -191,81 +227,84 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
           )}
         </div>
 
+        {/* Topics */}
         {expert.topics && expert.topics.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-3 sm:mt-4">
-            {expert.topics.slice(0, expanded ? undefined : 4).map((topic) => (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {expert.topics.slice(0, expanded ? undefined : 3).map((topic) => (
               <span
                 key={topic}
-                className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-red-500/10 text-red-300 rounded-lg text-xs font-medium border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                className="px-1.5 py-0.5 bg-red-500/8 text-red-300 rounded-md text-[10px] font-medium border border-red-500/15 hover:bg-red-500/15 transition-colors"
               >
                 {topic}
               </span>
             ))}
-            {!expanded && expert.topics.length > 4 && (
-              <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 text-zinc-400 font-semibold text-xs bg-zinc-800 rounded-lg border border-zinc-700">
-                +{expert.topics.length - 4} more
+            {!expanded && expert.topics.length > 3 && (
+              <span className="px-1.5 py-0.5 text-zinc-400 font-semibold text-[10px] bg-zinc-800 rounded-md border border-zinc-700">
+                +{expert.topics.length - 3}
               </span>
             )}
           </div>
         )}
 
-        <div className="mt-4 pt-4 border-t border-zinc-800">
-          <div className="flex items-center gap-3">
+        {/* Actions row */}
+        <div className="mt-3 pt-2.5 border-t border-zinc-800/60">
+          <div className="flex items-center gap-2">
             {expert.publications && expert.publications.length > 0 && expert.publications[0].startsWith('http') ? (
               <a
                 href={expert.publications[0]}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[13px] font-semibold transition-all bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-5 py-2 rounded-full shadow-lg shadow-red-500/20"
+                className="text-[11px] font-semibold transition-all bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-3.5 py-1.5 rounded-full shadow-md shadow-red-500/15"
                 onClick={(e) => e.stopPropagation()}
               >
                 View Research
               </a>
             ) : (
               <button
-                className="text-[13px] font-semibold transition-all bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-5 py-2 rounded-full shadow-lg shadow-red-500/20"
+                className="text-[11px] font-semibold transition-all bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white px-3.5 py-1.5 rounded-full shadow-md shadow-red-500/15"
                 onClick={(e) => { e.stopPropagation(); window.location.href = `mailto:connect@expertiq.ai?subject=Connect with ${encodeURIComponent(expert.name)}` }}
               >
-                Request Connection
+                Connect
               </button>
             )}
             {expert.ai_reasoning && (
               <button
                 onClick={() => setExpanded(!expanded)}
                 className={cn(
-                  "flex items-center gap-1.5 text-[13px] font-semibold transition-colors",
-                  "px-4 py-2 rounded-full border",
+                  "flex items-center gap-1 text-[11px] font-semibold transition-colors",
+                  "px-3 py-1.5 rounded-full border",
                   expanded
                     ? "bg-red-500/10 text-red-300 border-red-500/20"
                     : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-zinc-600"
                 )}
                 id={`reasoning-toggle-${expert.id}`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-red-400" />
+                <Sparkles className="w-3 h-3 text-red-400" />
                 {expanded ? (
                   <>
-                    <span>Hide AI Reasoning</span>
-                    <ChevronUp className="w-3.5 h-3.5" />
+                    <span>Hide</span>
+                    <ChevronUp className="w-3 h-3" />
                   </>
                 ) : (
                   <>
-                    <span>View AI Reasoning</span>
-                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>AI Reasoning</span>
+                    <ChevronDown className="w-3 h-3" />
                   </>
                 )}
               </button>
             )}
           </div>
 
+          {/* Expandable AI Reasoning */}
           {expert.ai_reasoning && (
             <div
               className={cn(
                 "overflow-hidden transition-all duration-300 ease-in-out",
-                expanded ? "max-h-[500px] opacity-100 mt-3" : "max-h-0 opacity-0"
+                expanded ? "max-h-[500px] opacity-100 mt-2.5" : "max-h-0 opacity-0"
               )}
             >
-              <div className="p-3 sm:p-4 bg-red-500/5 rounded-xl border border-red-500/10">
-                <p className="text-sm text-zinc-300 font-medium leading-relaxed break-words">
+              <div className="p-3 bg-red-500/5 rounded-lg border border-red-500/10">
+                <p className="text-xs text-zinc-300 font-medium leading-relaxed break-words">
                   {expert.ai_reasoning}
                 </p>
               </div>
@@ -273,14 +312,15 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
           )}
         </div>
 
+        {/* Expanded details */}
         {expanded && (
-          <div className="mt-4 pt-4 border-t border-zinc-800 animate-fade-in">
+          <div className="mt-3 pt-3 border-t border-zinc-800 animate-fade-in">
             {expert.bio && (
               <>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
                   Biography
                 </h4>
-                <p className="text-sm text-zinc-300 font-medium leading-relaxed mb-4 break-words">
+                <p className="text-xs text-zinc-300 font-medium leading-relaxed mb-3 break-words">
                   {expert.bio}
                 </p>
               </>
@@ -288,13 +328,13 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
 
             {expert.publications && expert.publications.length > 0 && (
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">
-                  Key Publications
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+                  Publications
                 </h4>
-                <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-3">
-                  <ul className="space-y-2">
+                <div className="bg-zinc-800/60 border border-zinc-700 rounded-lg p-2.5">
+                  <ul className="space-y-1.5">
                     {expert.publications.map((pub, i) => (
-                      <li key={i} className="text-sm text-zinc-300 font-medium pl-3 border-l-2 border-red-500/30 break-words">
+                      <li key={i} className="text-xs text-zinc-300 font-medium pl-2.5 border-l-2 border-red-500/30 break-words">
                         {pub}
                       </li>
                     ))}

@@ -71,8 +71,23 @@ class Settings(BaseSettings):
     # ── ChromaDB ──
     CHROMA_PERSIST_DIR: str = "./chroma_db"
 
+    # ── Pinecone ──
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_INDEX_NAME: str = "expertiq-experts"
+    PINECONE_CLOUD: str = "aws"
+    PINECONE_REGION: str = "us-east-1"
+    PINECONE_NAMESPACE: str = ""
+
     # ── Search Runtime ──
     SEARCH_BACKEND: str = "lightweight"
+
+    @property
+    def pinecone_available(self) -> bool:
+        """Check if Pinecone is properly configured."""
+        return bool(
+            self.PINECONE_API_KEY
+            and self.PINECONE_API_KEY != "your_pinecone_api_key_here"
+        )
 
     # ── Frontend ──
     FRONTEND_URL: str = "http://localhost:3000"

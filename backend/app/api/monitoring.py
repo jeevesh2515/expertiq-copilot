@@ -79,13 +79,19 @@ async def system_metrics() -> Dict[str, Any]:
     try:
         monitoring = get_monitoring()
         embedding_service = get_production_embedding_service()
-        vector_store = get_production_vector_store()
+        
+        if settings.SEARCH_BACKEND == "pinecone":
+            from app.core.vector_store_pinecone import get_pinecone_vector_store
+            vector_store_metrics = get_pinecone_vector_store().get_metrics()
+        else:
+            vector_store = get_production_vector_store()
+            vector_store_metrics = vector_store.get_metrics()
 
         return {
             "timestamp": monitoring.get_health_status()["timestamp"],
             "search_performance": monitoring.get_performance_summary(),
             "embedding_metrics": embedding_service.get_metrics(),
-            "vector_store_metrics": vector_store.get_metrics(),
+            "vector_store_metrics": vector_store_metrics,
             "monitoring": {
                 "active_searches": len([m for m in monitoring.recent_searches]),
                 "recent_searches_sample": [

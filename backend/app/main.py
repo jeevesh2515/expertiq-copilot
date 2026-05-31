@@ -25,6 +25,7 @@ from app.api.health import router as health_router
 from app.api.interactions import router as interaction_router
 from app.api.search import router as search_router
 from app.api.monitoring import router as monitoring_router
+from app.api.feedback import router as feedback_router
 from app.auth.routes import router as auth_router
 from app.config import get_settings
 from app.database import SessionLocal, init_db
@@ -132,6 +133,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.warning(f"⚠ Lightweight search index prewarm deferred: {e}")
         else:
             logger.info("✓ Search index lazy-loaded on first search.")
+
+        # Seed RAG document chunks collection
+        try:
+            from app.core.rag_pipeline import seed_document_chunks
+            count = seed_document_chunks(db)
+            if count > 0:
+                logger.info(f"✓ Seeded {count} RAG document chunks.")
+            else:
+                logger.info("✓ RAG document chunks collection already pre-populated.")
+        except Exception as e:
+            logger.warning(f"⚠ RAG document chunks seeding deferred: {e}")
 
         # 4. Build knowledge graph (optional in low-memory local mode)
         if settings.ENABLE_KNOWLEDGE_GRAPH:
@@ -267,6 +279,7 @@ app.include_router(auth_router)
 app.include_router(experts_router)
 app.include_router(search_router)
 app.include_router(interaction_router)
+app.include_router(feedback_router)
 
 
 # ── Root Endpoint ──

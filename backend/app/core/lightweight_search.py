@@ -199,9 +199,61 @@ class LightweightSearchEngine:
         for key, value in filters.items():
             if value in (None, ""):
                 continue
-            expert_value = str(expert.get(key, "")).strip().lower()
-            if expert_value != str(value).strip().lower():
-                return False
+            
+            expert_val = expert.get(key)
+            
+            # Handle dictionary-based operators (e.g. {"$gte": 15})
+            if isinstance(value, dict):
+                for op, op_val in value.items():
+                    if op_val in (None, ""):
+                        continue
+                    
+                    # Convert to numeric if possible for comparisons
+                    try:
+                        expert_num = float(expert_val) if expert_val is not None else 0.0
+                        op_num = float(op_val)
+                        is_numeric = True
+                    except (ValueError, TypeError):
+                        is_numeric = False
+                    
+                    if op == "$gte":
+                        if is_numeric:
+                            if not (expert_num >= op_num):
+                                return False
+                        else:
+                            if not (str(expert_val).lower() >= str(op_val).lower()):
+                                return False
+                    elif op == "$lte":
+                        if is_numeric:
+                            if not (expert_num <= op_num):
+                                return False
+                        else:
+                            if not (str(expert_val).lower() <= str(op_val).lower()):
+                                return False
+                    elif op == "$gt":
+                        if is_numeric:
+                            if not (expert_num > op_num):
+                                return False
+                        else:
+                            if not (str(expert_val).lower() > str(op_val).lower()):
+                                return False
+                    elif op == "$lt":
+                        if is_numeric:
+                            if not (expert_num < op_num):
+                                return False
+                        else:
+                            if not (str(expert_val).lower() < str(op_val).lower()):
+                                return False
+                    elif op == "$eq":
+                        if str(expert_val).strip().lower() != str(op_val).strip().lower():
+                            return False
+                    elif op == "$ne":
+                        if str(expert_val).strip().lower() == str(op_val).strip().lower():
+                            return False
+            else:
+                expert_str = str(expert_val).strip().lower() if expert_val is not None else ""
+                if expert_str != str(value).strip().lower():
+                    return False
         return True
 
     def _score(

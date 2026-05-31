@@ -51,7 +51,7 @@ def _get_model_chain() -> List[str]:
     return models
 
 
-def _call_groq(prompt: str, max_tokens: int = 2000) -> Optional[str]:
+def _call_groq(prompt: str, max_tokens: int = 2000, response_format: Optional[Dict[str, Any]] = None) -> Optional[str]:
     if not settings.groq_available:
         return None
 
@@ -75,12 +75,16 @@ def _call_groq(prompt: str, max_tokens: int = 2000) -> Optional[str]:
 
     for model in _get_model_chain():
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=0.2,
-            )
+            kwargs = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": 0.2,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+                
+            response = client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as exc:  # pragma: no cover - network-dependent
             error_text = str(exc).lower()
@@ -277,7 +281,7 @@ def query_analyser(state: AgentState) -> AgentState:
     }
 
     llm_result = _call_groq(
-        f"""Analyse this expert search query and extract structured information.
+        f"""Analyse this expert search query, extract structured information, and generate query expansion parameters.
 Query: "{query}"
 
 Return a JSON object with:
@@ -286,9 +290,13 @@ Return a JSON object with:
 - "industries": list of relevant industries
 - "seniority_preference": preferred seniority level or null
 - "domain_context": brief context about the research domain
+- "hyde_bio": A short, hypothetical biography paragraph (4-5 sentences) of the perfect expert candidate. Write in professional third-person narrative style as if they are a real person with concrete experiences, publications, and skills matching the query. Do not add introductory/concluding text.
+- "constraints": A sub-object containing:
+    - "min_years_experience": integer or null (extract if query requests e.g. "15 years", "10+ years", or "senior operator" implying years)
+    - "availability": string ("available" or null, e.g. if query requests "who is available" or "for hire")
 
 Return ONLY valid JSON, no other text.""",
-        max_tokens=500,
+        max_tokens=1000,
     )
 
     if llm_result:
@@ -299,6 +307,19 @@ Return ONLY valid JSON, no other text.""",
         except (json.JSONDecodeError, AttributeError):
             logger.warning("Failed to parse LLM query analysis; using local analysis only.")
 
+    # Resilient fallbacks for local/offline run contexts
+    if "hyde_bio" not in analysis or not analysis["hyde_bio"]:
+        analysis["hyde_bio"] = query
+    if "constraints" not in analysis:
+        # Check simple local regex heuristics for years of experience
+        years_match = re.search(r"(\d+)\+?\s*years?", query)
+        min_years = int(years_match.group(1)) if years_match else None
+        availability = "available" if "available" in query.lower() or "hire" in query.lower() else None
+        analysis["constraints"] = {
+            "min_years_experience": min_years,
+            "availability": availability
+        }
+
     state["query_analysis"] = analysis
     return state
 
@@ -307,32 +328,118 @@ Return ONLY valid JSON, no other text.""",
 def vector_searcher(state: AgentState) -> AgentState:
 
     query = state["query"]
-    top_k = max(state.get("top_k", 20) * 2, 12)
-    filters = state.get("filters")
+    
+    # 1. HyDE Query Expansion: use the generated hypothetical bio if available
+    hyde_bio = state.get("query_analysis", {}).get("hyde_bio", query)
+    
+    # 2. Self-Querying: Compile natural language constraints into database filters
+    filters = {}
+    if state.get("filters"):
+        filters.update(state["filters"])
+        
+    constraints = state.get("query_analysis", {}).get("constraints", {})
+    min_years = constraints.get("min_years_experience")
+    if min_years is not None:
+        filters["years_experience"] = {"$gte": min_years}
+    avail = constraints.get("availability")
+    if avail:
+        filters["availability"] = avail
+        
+    # Clean up empty filters
+    if not filters:
+        filters = None
 
-    if settings.SEARCH_BACKEND == "pro":
+    top_k = max(state.get("top_k", 20) * 2, 12)
+    vector_results = []
+
+    # 3. Fetch dense vector results from active backend using HyDE biography
+    if settings.SEARCH_BACKEND == "pinecone":
         try:
-            from app.core.llm_search import get_llm_semantic_search
-            search_engine = get_llm_semantic_search()
-            results = search_engine.vector_store.semantic_search(query=query, top_k=top_k, filters=filters)
-            state["vector_results"] = [
+            from app.core.vector_store_pinecone import get_pinecone_vector_store
+            pc_store = get_pinecone_vector_store()
+            results = pc_store.semantic_search(query=hyde_bio, top_k=top_k, filters=filters)
+            vector_results = [
                 {
                     "id": r["id"],
                     "metadata": r.get("metadata", {}),
                     "document": r.get("content", ""),
                     "similarity_score": r.get("similarity", 0) * 100,
-                    "local_reasoning": "Found via local ChromaDB vector search.",
+                    "local_reasoning": "Found via Pinecone vector search matching hypothetical bio.",
                 }
                 for r in results
             ]
         except Exception as exc:
-            logger.warning("Pro search backend unavailable, falling back to lightweight: %s", exc)
-            search_engine = get_lightweight_search_engine()
-            state["vector_results"] = search_engine.search(query=query, top_k=top_k, filters=filters)
-    else:
-        search_engine = get_lightweight_search_engine()
-        state["vector_results"] = search_engine.search(query=query, top_k=top_k, filters=filters)
+            logger.warning("Pinecone search backend failed: %s", exc)
 
+    elif settings.SEARCH_BACKEND == "pro":
+        try:
+            from app.core.llm_search import get_llm_semantic_search
+            search_engine = get_llm_semantic_search()
+            results = search_engine.vector_store.semantic_search(query=hyde_bio, top_k=top_k, filters=filters)
+            vector_results = [
+                {
+                    "id": r["id"],
+                    "metadata": r.get("metadata", {}),
+                    "document": r.get("content", ""),
+                    "similarity_score": r.get("similarity", 0) * 100,
+                    "local_reasoning": "Found via local ChromaDB vector search matching hypothetical bio.",
+                }
+                for r in results
+            ]
+        except Exception as exc:
+            logger.warning("Pro search backend unavailable: %s", exc)
+
+    # 4. Fetch sparse keyword results from lightweight search engine
+    search_engine = get_lightweight_search_engine()
+    keyword_results = search_engine.search(query=query, top_k=top_k, filters=filters)
+
+    # 3. Fuse dense vector and sparse keyword results linearly
+    fused_results = {}
+
+    # Map vector results
+    for vr in vector_results:
+        fused_results[vr["id"]] = {
+            "id": vr["id"],
+            "metadata": vr["metadata"],
+            "document": vr["document"],
+            "vector_score": vr["similarity_score"],
+            "keyword_score": 0.0,
+            "local_reasoning": vr["local_reasoning"]
+        }
+
+    # Map keyword results
+    for kr in keyword_results:
+        expert_id = kr["id"]
+        if expert_id in fused_results:
+            fused_results[expert_id]["keyword_score"] = kr["similarity_score"]
+            # Enriched reasoning showing both semantic and keyword hits
+            fused_results[expert_id]["local_reasoning"] = "Semantic match reinforced by precise keyword hits."
+        else:
+            fused_results[expert_id] = {
+                "id": expert_id,
+                "metadata": kr["metadata"],
+                "document": kr["document"],
+                "vector_score": 30.0, # Baseline fallback semantic score
+                "keyword_score": kr["similarity_score"],
+                "local_reasoning": "Found via lightweight keyword search."
+            }
+
+    # If both dense & sparse failed, keep empty
+    final_results = []
+    for item in fused_results.values():
+        v_score = item["vector_score"]
+        k_score = item["keyword_score"]
+
+        # Calculate hybrid score: 60% vector + 40% keyword
+        v_contrib = v_score * 0.6
+        k_contrib = (max(30.0, k_score) if k_score == 0.0 else k_score) * 0.4
+
+        item["similarity_score"] = round(v_contrib + k_contrib, 2)
+        final_results.append(item)
+
+    # Re-sort hybrid results by combined similarity score
+    final_results.sort(key=lambda x: x["similarity_score"], reverse=True)
+    state["vector_results"] = final_results[:top_k]
     return state
 
 
@@ -437,6 +544,39 @@ def reranker(state: AgentState) -> AgentState:
         state["ranked_candidates"] = []
         return state
 
+    from app.core.vector_store import get_vector_store
+    vs = get_vector_store()
+
+    # 1. Retrieve dynamic RAG grounding sources for each candidate
+    for candidate in candidates:
+        expert_id = candidate["id"]
+        chunks = []
+        try:
+            chunks = vs.search_documents(query=query, top_k=3, filters={"expert_id": expert_id})
+        except Exception as chunk_exc:
+            logger.warning(f"Failed to retrieve dynamic chunks for expert {expert_id}: {chunk_exc}")
+
+        if chunks:
+            candidate["grounding_sources"] = [
+                {
+                    "content": chunk["content"],
+                    "source_type": chunk["metadata"].get("source_type", "document"),
+                    "score": chunk.get("score")
+                }
+                for chunk in chunks
+            ]
+        else:
+            # Fallback to biography grounding
+            bio = candidate.get("metadata", {}).get("bio") or candidate.get("document", "")
+            candidate["grounding_sources"] = [
+                {
+                    "content": f"Biography context: {bio}",
+                    "source_type": "biography",
+                    "score": 1.0
+                }
+            ]
+
+    # 2. Structured LLM Re-ranking using native JSON Mode
     llm_result: Optional[str] = None
     if settings.groq_available:
         expert_summaries = []
@@ -448,28 +588,39 @@ def reranker(state: AgentState) -> AgentState:
                 f"Topics: {meta.get('topics', 'N/A')}"
             )
 
-        llm_result = _call_groq(
-            f"""You are evaluating expert candidates for this research query:
+        prompt = f"""You are evaluating expert candidates for this research query:
 "{query}"
 
 Here are the candidates:
 {chr(10).join(expert_summaries)}
 
-For each candidate, provide a score from 1-10 and a brief reasoning.
-Return a JSON array of objects with "index", "score", and "reasoning".
-Return ONLY valid JSON.""",
+Evaluate each expert candidate for absolute relevance to the query.
+You must return a JSON object with a single key "rankings" containing a JSON array of objects.
+Each object must have "index" (integer), "score" (number from 1 to 10), and "reasoning" (string).
+Example format:
+{{
+  "rankings": [
+    {{"index": 1, "score": 9.5, "reasoning": "Direct expertise in high-frequency trading."}}
+  ]
+}}
+Return ONLY valid JSON."""
+
+        llm_result = _call_groq(
+            prompt,
             max_tokens=1200,
+            response_format={"type": "json_object"}
         )
 
     ranking_map: Dict[int, Dict[str, Any]] = {}
     if llm_result:
         try:
-            json_match = re.search(r"\[.*\]", llm_result, re.DOTALL)
-            if json_match:
-                rankings = json.loads(json_match.group())
-                ranking_map = {item["index"]: item for item in rankings}
-        except (json.JSONDecodeError, AttributeError, KeyError):
-            logger.warning("Failed to parse LLM reranking; using local scoring.")
+            payload = json.loads(llm_result)
+            rankings = payload.get("rankings", [])
+            for item in rankings:
+                idx = int(item["index"])
+                ranking_map[idx] = item
+        except Exception as parse_err:
+            logger.warning(f"Failed to parse LLM structured reranking JSON: {parse_err}. Output: {llm_result}")
 
     for index, candidate in enumerate(candidates, 1):
         if index in ranking_map:
@@ -576,6 +727,7 @@ def response_builder(state: AgentState) -> AgentState:
                 "graph_score": 10.0 if candidate.get("graph_discovered") else 0.0,
                 "llm_score": candidate.get("llm_score"),
                 "ai_reasoning": candidate.get("ai_reasoning"),
+                "grounding_sources": candidate.get("grounding_sources", []),
             }
         )
 

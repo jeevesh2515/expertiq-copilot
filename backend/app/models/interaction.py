@@ -47,6 +47,7 @@ class SearchHistory(Base):
     filters_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     result_count: Mapped[int] = mapped_column(Integer, default=0)
     processing_time_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    thread_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -64,11 +64,19 @@ class RAGPipeline:
             return "\n\n---\n\n".join(context_parts)
 
         context_parts = []
+        seen_parent_ids = set()
         for chunk in results:
+            parent_id = chunk.get("metadata", {}).get("parent_id")
+            if parent_id:
+                if parent_id in seen_parent_ids:
+                    continue
+                seen_parent_ids.add(parent_id)
+                
+            content = chunk.get("metadata", {}).get("parent_text") or chunk["content"]
             source_type = chunk.get("metadata", {}).get("source_type", "document")
             expert_name = chunk.get("metadata", {}).get("expert_name", "Unknown")
             context_parts.append(
-                f"[{source_type.upper()} — {expert_name}]\n{chunk['content']}"
+                f"[{source_type.upper()} — {expert_name}]\n{content}"
             )
 
         return "\n\n---\n\n".join(context_parts)
@@ -131,3 +139,59 @@ def get_rag_pipeline() -> RAGPipeline:
     if _rag_pipeline is None:
         _rag_pipeline = RAGPipeline()
     return _rag_pipeline
+
+
+def seed_document_chunks(db) -> int:
+    """
+    Dynamically extract, chunk, and embed expert publications and biographies
+    into ChromaDB for rich RAG context grounding.
+    """
+    from app.core.vector_store import get_vector_store
+    vs = get_vector_store()
+    
+    # Check if already seeded to avoid redundant embedding generation
+    try:
+        if vs.get_document_count() > 0:
+            return 0
+    except Exception as count_err:
+        logger.warning(f"Could not check document collection count, proceeding with seed: {count_err}")
+
+    from app.models.expert import Expert
+    experts = db.query(Expert).all()
+    chunk_ids = []
+    chunks = []
+    metadatas = []
+
+    for expert in experts:
+        # 1. Chunk and index biography
+        bio_chunk_id = f"doc_{expert.id}_bio"
+        bio_text = f"Expert Biography for {expert.name} ({expert.title} at {expert.company}):\n{expert.bio}"
+        chunk_ids.append(bio_chunk_id)
+        chunks.append(bio_text)
+        metadatas.append({
+            "expert_id": expert.id,
+            "expert_name": expert.name,
+            "source_type": "biography"
+        })
+
+        # 2. Chunk and index publications
+        for idx, pub in enumerate(expert.publications):
+            pub_chunk_id = f"doc_{expert.id}_pub_{idx}"
+            pub_text = f"Research Publication by {expert.name} ({expert.title} at {expert.company}):\n'{pub}'"
+            chunk_ids.append(pub_chunk_id)
+            chunks.append(pub_text)
+            metadatas.append({
+                "expert_id": expert.id,
+                "expert_name": expert.name,
+                "source_type": "publication"
+            })
+
+    if chunk_ids:
+        try:
+            vs.add_document_chunks(chunk_ids, chunks, metadatas)
+            return len(chunk_ids)
+        except Exception as e:
+            logger.error(f"Failed to seed RAG document collection: {e}")
+            raise
+    return 0
+

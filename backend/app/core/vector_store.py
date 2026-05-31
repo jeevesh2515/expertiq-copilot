@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
+from langsmith import traceable
 
 from app.config import get_settings
 from app.core.embeddings import get_embedding_service
@@ -104,22 +105,52 @@ class VectorStore:
         metadatas: List[Dict[str, Any]],
     ) -> None:
         """
-        Add document chunks (bios, publications) for RAG retrieval.
-
-        Args:
-            chunk_ids: Unique IDs for each chunk.
-            chunks: Text content of each chunk.
-            metadatas: Metadata for filtering (expert_id, source_type, etc.).
+        Add document chunks for RAG retrieval using Parent-Child semantic chunking.
+        Each input chunk is treated as a Parent Chunk. We split it into smaller
+        Child Chunks (sentences) for high-resolution vector search, linking them
+        to the Parent via metadata to retrieve full coherent context.
         """
-        embeddings = self._embedding_service.embed_texts(chunks)
-        self.document_collection.upsert(
-            ids=chunk_ids,
-            embeddings=embeddings,
-            documents=chunks,
-            metadatas=metadatas,
-        )
+        import re
+
+        child_ids = []
+        child_texts = []
+        child_metadatas = []
+
+        for i, parent_id in enumerate(chunk_ids):
+            parent_text = chunks[i]
+            meta = metadatas[i]
+
+            # Split parent text into sentences as semantic units (child chunks)
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", parent_text) if len(s.strip()) > 10]
+            if not sentences:
+                sentences = [parent_text]
+
+            for idx, sentence in enumerate(sentences):
+                c_id = f"{parent_id}_c{idx}"
+                child_ids.append(c_id)
+                child_texts.append(sentence)
+                
+                # Enrich child metadata with parent references
+                c_meta = {
+                    **meta,
+                    "parent_id": parent_id,
+                    "parent_text": parent_text,
+                    "child_index": idx
+                }
+                child_metadatas.append(c_meta)
+
+        if child_ids:
+            embeddings = self._embedding_service.embed_texts(child_texts)
+            self.document_collection.upsert(
+                ids=child_ids,
+                embeddings=embeddings,
+                documents=child_texts,
+                metadatas=child_metadatas,
+            )
+            logger.info(f"Added {len(child_ids)} child chunks generated from {len(chunk_ids)} parent documents.")
         logger.info(f"Added {len(chunk_ids)} document chunks.")
 
+    @traceable(run_type="retriever")
     def search_experts(
         self,
         query: str,
@@ -154,10 +185,13 @@ class VectorStore:
                 # Convert distance to similarity score (0-100)
                 distance = results["distances"][0][i] if results["distances"] else 0
                 similarity = max(0, (1 - distance / 2)) * 100  # Normalise to 0-100
+                content = results["documents"][0][i] if results["documents"] else ""
 
                 parsed_results.append({
                     "id": doc_id,
-                    "document": results["documents"][0][i] if results["documents"] else "",
+                    "document": content,
+                    "page_content": content,
+                    "type": "Document",
                     "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
                     "distance": distance,
                     "similarity_score": round(similarity, 2),
@@ -165,6 +199,7 @@ class VectorStore:
 
         return parsed_results
 
+    @traceable(run_type="retriever")
     def search_documents(
         self,
         query: str,
@@ -182,6 +217,34 @@ class VectorStore:
         Returns:
             List of matching document chunks.
         """
+        # If filtering by a single expert, fetch all their chunks first to prevent ChromaDB's ANN post-filtering bug
+        if filters and "expert_id" in filters and isinstance(filters["expert_id"], str):
+            results = self.document_collection.get(where=filters)
+            parsed = []
+            if results and results["ids"]:
+                for i, doc_id in enumerate(results["ids"]):
+                    content = results["documents"][i] if results["documents"] else ""
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    score = 0.85  # baseline relevance
+                    if query:
+                        # Simple keyword overlap relevance score (TF-IDF analogue)
+                        query_words = set(query.lower().split())
+                        doc_words = set(content.lower().split())
+                        overlap = len(query_words.intersection(doc_words))
+                        if len(query_words) > 0:
+                            score = min(0.99, 0.5 + (overlap / len(query_words)) * 0.5)
+                    parsed.append({
+                        "id": doc_id,
+                        "content": content,
+                        "page_content": content,
+                        "type": "Document",
+                        "metadata": metadata,
+                        "score": score
+                    })
+                # Sort by relevance score descending
+                parsed.sort(key=lambda x: x["score"], reverse=True)
+                return parsed[:top_k]
+
         query_embedding = self._embedding_service.embed_text(query)
 
         search_kwargs: Dict[str, Any] = {
@@ -196,10 +259,18 @@ class VectorStore:
         parsed = []
         if results and results["ids"] and results["ids"][0]:
             for i, doc_id in enumerate(results["ids"][0]):
+                similarity = 0.85
+                if results.get("distances") and results["distances"][0]:
+                    distance = results["distances"][0][i]
+                    similarity = max(0, (1 - distance / 2))
+                content = results["documents"][0][i] if results["documents"] else ""
                 parsed.append({
                     "id": doc_id,
-                    "content": results["documents"][0][i] if results["documents"] else "",
+                    "content": content,
+                    "page_content": content,
+                    "type": "Document",
                     "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
+                    "score": round(similarity, 3)
                 })
 
         return parsed

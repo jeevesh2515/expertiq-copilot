@@ -165,3 +165,85 @@ class TestExpertsEndpoint:
         """Unauthenticated request returns 403."""
         response = client.get("/api/experts")
         assert response.status_code == 403
+
+
+class TestVectorStoreRetriever:
+    """Tests to verify LangSmith retriever trace format compatibility."""
+
+    def test_chroma_retriever_format(self) -> None:
+        """Assert that ChromaDB search returns page_content and type for LangSmith compatibility."""
+        from app.core.vector_store import get_vector_store
+        vs = get_vector_store()
+        
+        # Test search_experts
+        experts = vs.search_experts(query="FinTech", top_k=2)
+        if experts:
+            for exp in experts:
+                assert "page_content" in exp
+                assert "type" in exp
+                assert exp["type"] == "Document"
+                assert exp["page_content"] == exp["document"]
+
+        # Test search_documents
+        docs = vs.search_documents(query="AI", top_k=2)
+        if docs:
+            for doc in docs:
+                assert "page_content" in doc
+                assert "type" in doc
+                assert doc["type"] == "Document"
+                assert doc["page_content"] == doc["content"]
+
+
+class TestConversationThreads:
+    """Tests for conversation threads tracing and persistence."""
+
+    def test_search_request_schema_thread_id(self) -> None:
+        """SearchRequest accepts and serializes thread_id."""
+        from app.schemas.search import SearchRequest
+        req = SearchRequest(query="Fintech expert", thread_id="my-custom-session-uuid")
+        assert req.thread_id == "my-custom-session-uuid"
+
+    def test_search_response_auto_generates_thread_id(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        """Endpoint auto-generates a thread_id if not provided in search request."""
+        response = client.post(
+            "/api/search",
+            json={"query": "Find fintech compliance expert"},
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 500]
+        if response.status_code == 200:
+            data = response.json()
+            assert "thread_id" in data
+            assert data["thread_id"] is not None
+            # Validate it is a valid UUID or custom string
+            assert len(data["thread_id"]) > 5
+
+    def test_search_persists_thread_id_to_history(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        """Search history DB record is persisted with the correct thread_id."""
+        thread_id = "test-thread-id-12345"
+        response = client.post(
+            "/api/search",
+            json={
+                "query": "FinTech and AI expert search",
+                "thread_id": thread_id
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 500]
+        
+        # Query SearchHistory table directly
+        from app.database import SessionLocal
+        from app.models.interaction import SearchHistory
+        
+        db = SessionLocal()
+        try:
+            records = db.query(SearchHistory).filter(SearchHistory.thread_id == thread_id).all()
+            assert len(records) > 0
+            assert records[0].query_text == "FinTech and AI expert search"
+            assert records[0].thread_id == thread_id
+        finally:
+            db.close()

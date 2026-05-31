@@ -112,3 +112,27 @@ def init_db() -> None:
     # Import all models here to register them with Base
     import app.models
     Base.metadata.create_all(bind=engine)
+
+    # Dynamic Column Migration: check if search_history is missing the thread_id column and add it safely
+    try:
+        with engine.connect() as conn:
+            # PRAGMA table_info is standard and safe for SQLite
+            if "sqlite" in engine.url.drivername:
+                cursor = conn.execute("PRAGMA table_info(search_history)")
+                columns = [row[1] for row in cursor.fetchall()]
+                if "thread_id" not in columns:
+                    conn.execute("ALTER TABLE search_history ADD COLUMN thread_id VARCHAR(50)")
+                    print("✓ SQLite Database Migration: Added thread_id column to search_history table.")
+            # PostgreSQL information_schema.columns check
+            else:
+                cursor = conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='search_history' AND column_name='thread_id'"
+                )
+                if not cursor.fetchone():
+                    conn.execute("ALTER TABLE search_history ADD COLUMN thread_id VARCHAR(50)")
+                    print("✓ PostgreSQL Database Migration: Added thread_id column to search_history table.")
+    except Exception as err:
+        # Gracefully handle migration exceptions so we never block app startup
+        import logging
+        logging.getLogger("expertiq").warning(f"⚠ Database thread_id migration deferred: {err}")

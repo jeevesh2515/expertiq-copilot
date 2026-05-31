@@ -67,17 +67,26 @@ async def search_experts(
         return cached_response
 
     try:
-        agent = get_agent()
-        response = agent.run(
-            query=search_request.query,
-            filters=search_request.filters,
-            top_k=search_request.top_k,
-            include_graph=search_request.include_graph,
-        )
+        import uuid
+        langsmith_run_id = str(uuid.uuid4())
+        thread_id = search_request.thread_id or str(uuid.uuid4())
+
+        import langsmith as ls
+        with ls.tracing_context(metadata={"thread_id": thread_id}):
+            agent = get_agent()
+            response = agent.run(
+                query=search_request.query,
+                filters=search_request.filters,
+                top_k=search_request.top_k,
+                include_graph=search_request.include_graph,
+                langsmith_extra={"run_id": langsmith_run_id}
+            )
 
         response["processing_time_ms"] = round(
             (time.time() - start_time) * 1000, 2
         )
+        response["request_id"] = langsmith_run_id
+        response["thread_id"] = thread_id
 
         # Store in cache
         try:
@@ -91,7 +100,8 @@ async def search_experts(
                 query_text=search_request.query,
                 filters_json=json.dumps(search_request.filters) if search_request.filters else None,
                 result_count=response.get("total_results", 0),
-                processing_time_ms=response.get("processing_time_ms", 0)
+                processing_time_ms=response.get("processing_time_ms", 0),
+                thread_id=thread_id
             )
             db.add(history)
             db.commit()
@@ -128,31 +138,40 @@ async def stream_search_experts(
     try:
         from fastapi.responses import StreamingResponse
         agent = get_agent()
+        thread_id = search_request.thread_id or str(uuid.uuid4())
         logger.info(f"Starting search stream for user {current_user.id}")
+        
         async def wrapped_stream():
             logger.info("Initializing wrapped_stream generator")
-            async for event in agent.stream_run(
-                query=search_request.query,
-                filters=search_request.filters,
-                top_k=search_request.top_k,
-                include_graph=search_request.include_graph,
-            ):
-                yield event
-                if event.startswith('data: {"type": "results"'):
-                    try:
-                        payload = json.loads(event[6:])
-                        results_data = payload.get("data") or {}
-                        h = SearchHistory(
-                            user_id=current_user.id,
-                            query_text=search_request.query,
-                            filters_json=json.dumps(search_request.filters) if search_request.filters else None,
-                            result_count=results_data.get("total_results", 0),
-                            processing_time_ms=results_data.get("processing_time_ms", 0)
-                        )
-                        db.add(h)
-                        db.commit()
-                    except Exception as he:
-                        logger.warning(f"Failed to record stream history: {he}")
+            import langsmith as ls
+            with ls.tracing_context(metadata={"thread_id": thread_id}):
+                async for event in agent.stream_run(
+                    query=search_request.query,
+                    filters=search_request.filters,
+                    top_k=search_request.top_k,
+                    include_graph=search_request.include_graph,
+                ):
+                    if event.startswith('data: {"type": "results"'):
+                        try:
+                            payload = json.loads(event[6:])
+                            results_data = payload.get("data") or {}
+                            results_data["thread_id"] = thread_id
+                            payload["data"] = results_data
+                            event = f"data: {json.dumps(payload)}\n\n"
+                            
+                            h = SearchHistory(
+                                user_id=current_user.id,
+                                query_text=search_request.query,
+                                filters_json=json.dumps(search_request.filters) if search_request.filters else None,
+                                result_count=results_data.get("total_results", 0),
+                                processing_time_ms=results_data.get("processing_time_ms", 0),
+                                thread_id=thread_id
+                            )
+                            db.add(h)
+                            db.commit()
+                        except Exception as he:
+                            logger.warning(f"Failed to record stream history: {he}")
+                    yield event
 
         return StreamingResponse(
             wrapped_stream(),

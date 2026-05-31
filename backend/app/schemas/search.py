@@ -35,6 +35,10 @@ class SearchRequest(BaseModel):
         default=False,
         description="Include knowledge graph nodes and edges in the response",
     )
+    thread_id: Optional[str] = Field(
+        default=None,
+        description="Optional conversation/session thread ID to group related searches in LangSmith",
+    )
 
     @field_validator("query")
     @classmethod
@@ -92,8 +96,16 @@ class GraphData(BaseModel):
     edges: List[GraphEdge] = Field(default_factory=list)
 
 
+class GroundingSource(BaseModel):
+    """A RAG document chunk that grounds an expert's match."""
+
+    content: str
+    source_type: str = Field(default="document", description="Type of document (e.g. publication, patent, biography)")
+    score: Optional[float] = Field(default=None, description="Relevance score of this specific chunk")
+
+
 class ExpertResult(BaseModel):
-    """A single expert result with AI scoring."""
+    """A single expert result with AI scoring and RAG source grounding."""
 
     id: str
     name: str
@@ -121,6 +133,9 @@ class ExpertResult(BaseModel):
     ai_reasoning: Optional[str] = Field(
         default=None, description="LLM-generated reasoning for this match"
     )
+    grounding_sources: List[GroundingSource] = Field(
+        default_factory=list, description="Retrieved document chunks grounding this expert match"
+    )
 
 
 class SearchResponse(BaseModel):
@@ -142,6 +157,14 @@ class SearchResponse(BaseModel):
         description="Parsed query intent, entities, and domain",
     )
     processing_time_ms: Optional[float] = None
+    request_id: Optional[str] = Field(
+        default=None,
+        description="Unique request tracing identifier matching search history"
+    )
+    thread_id: Optional[str] = Field(
+        default=None,
+        description="The conversation/session thread ID associated with this search sequence"
+    )
 
 
 class ErrorResponse(BaseModel):

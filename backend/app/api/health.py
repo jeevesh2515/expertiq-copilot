@@ -40,6 +40,7 @@ async def health_check() -> Dict[str, object]:
             "embedding_model": settings.EMBEDDING_MODEL if settings.groq_available else None,
             "knowledge_graph_enabled": settings.ENABLE_KNOWLEDGE_GRAPH,
             "index_prewarm_enabled": settings.PREWARM_LIGHTWEIGHT_INDEX,
+            "pinecone_configured": settings.pinecone_available,
         },
     }
 

@@ -266,6 +266,12 @@ export interface SearchRequest {
   include_graph?: boolean;
 }
 
+export interface GroundingSource {
+  content: string;
+  source_type: string;
+  score?: number;
+}
+
 export interface ExpertResult {
   id: string;
   name: string;
@@ -283,6 +289,7 @@ export interface ExpertResult {
   graph_score?: number;
   llm_score?: number;
   ai_reasoning?: string;
+  grounding_sources?: GroundingSource[];
 }
 
 export interface GraphNode {
@@ -310,6 +317,7 @@ export interface SearchResponse {
   graph_data?: GraphData;
   query_analysis?: Record<string, unknown>;
   processing_time_ms?: number;
+  request_id?: string;
 }
 
 export interface ApiErrorLike {
@@ -410,4 +418,24 @@ export interface HealthResponse {
 
 export async function checkHealth(): Promise<HealthResponse> {
   return api.get<HealthResponse>("/api/health");
+}
+
+// -- Feedback API --
+
+export interface FeedbackRequest {
+  query: string;
+  expert_id: string;
+  score: number; // 1 or -1
+  comments?: string;
+  langsmith_run_id?: string;
+}
+
+export interface FeedbackResponse {
+  success: boolean;
+  message: string;
+  feedback_id: number;
+}
+
+export async function submitFeedback(data: FeedbackRequest): Promise<FeedbackResponse> {
+  return api.post<FeedbackResponse>("/api/search/feedback", data);
 }

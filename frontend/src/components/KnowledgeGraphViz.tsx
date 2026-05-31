@@ -741,16 +741,19 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
     [getNodeAt, dimensions, renderCanvas],
   );
 
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    const dx = e.clientX - mouseDownPos.current.x;
-    const dy = e.clientY - mouseDownPos.current.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+  const handleMouseUp = useCallback((e: React.MouseEvent | null) => {
+    // Guard: when called from onMouseLeave, e may be null
+    if (e) {
+      const dx = e.clientX - mouseDownPos.current.x;
+      const dy = e.clientY - mouseDownPos.current.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Interactive Tap Selection
-    if (dist < 4 && dragRef.current.nodeId) {
-      const clickedId = dragRef.current.nodeId;
-      if (onSelectNode) {
-        onSelectNode(clickedId === selectedId ? null : clickedId);
+      // Interactive Tap Selection
+      if (dist < 4 && dragRef.current.nodeId) {
+        const clickedId = dragRef.current.nodeId;
+        if (onSelectNode) {
+          onSelectNode(clickedId === selectedId ? null : clickedId);
+        }
       }
     }
 
@@ -1031,7 +1034,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={() => { handleMouseUp(null as any); setTooltipNode(null); hoveredRef.current = null; renderCanvas(); }}
+          onMouseLeave={() => { handleMouseUp(null); setTooltipNode(null); hoveredRef.current = null; renderCanvas(); }}
           onDoubleClick={handleDoubleClick}
         />
 

@@ -357,6 +357,107 @@ select option {
   box-shadow: 0 0 20px rgba(245, 158, 11, 0.12), 0 0 40px rgba(245, 158, 11, 0.04);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Results Viewport Layout System
+   Left column scrolls independently, right column stays fixed.
+   Both graphs are ALWAYS visible on screen.
+   ═══════════════════════════════════════════════════════════════ */
+
+.results-viewport {
+  /* Fill remaining viewport height below the navbar + search bar */
+  height: calc(100vh - 92px);
+  min-height: 480px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.results-container {
+  display: flex;
+  flex: 1 1 0%;
+  min-height: 0;
+  width: 100%;
+  max-width: 1520px;
+  margin: 0 auto;
+  gap: 0;
+}
+
+/* Left: scrollable results */
+.results-left-scroll {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  /* Subtle inset shadow at top/bottom to signal scroll */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    black 8px,
+    black calc(100% - 8px),
+    transparent 100%
+  );
+}
+
+/* Custom scrollbar for results panel */
+.results-left-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.results-left-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.results-left-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+.results-left-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Right: fixed graph column — NEVER scrolls */
+.results-right-fixed {
+  display: none;
+  width: 460px;
+  min-width: 420px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-left: 1px solid rgba(39, 39, 42, 0.5);
+  position: relative;
+}
+
+/* Subtle gradient separator between columns */
+.results-right-fixed::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(239, 68, 68, 0.15) 30%,
+    rgba(245, 158, 11, 0.12) 70%,
+    transparent 100%
+  );
+  z-index: 5;
+  pointer-events: none;
+}
+
+@media (min-width: 1024px) {
+  .results-right-fixed {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@media (min-width: 1280px) {
+  .results-right-fixed {
+    width: 500px;
+    min-width: 460px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   Bookmark as BookmarkIcon,
   Building2,
@@ -19,6 +19,7 @@ interface ExpertCardProps {
   expert: ExpertResult;
   rank?: number;
   initBookmarked?: boolean;
+  onNotification?: (message: string, type: "success" | "error") => void;
   onBookmarkToggle?: (expertId: string, bookmarked: boolean) => void;
 }
 
@@ -73,10 +74,14 @@ const TIER_ACCENT = {
   low: "from-zinc-600 to-zinc-500",
 };
 
-function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCardProps) {
+function ExpertCard({ expert, rank, initBookmarked, onNotification, onBookmarkToggle }: ExpertCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [bookmarked, setBookmarked] = useState(initBookmarked || false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
+
+  useEffect(() => {
+    setBookmarked(initBookmarked || false);
+  }, [initBookmarked]);
 
   const matchScore = typeof expert.match_score === "number" ? expert.match_score : null;
   const vectorScore = typeof expert.vector_score === "number" ? expert.vector_score : null;
@@ -90,13 +95,16 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
         await removeBookmark(expert.id);
         setBookmarked(false);
         onBookmarkToggle?.(expert.id, false);
+        onNotification?.("Expert removed from saved shortlists.", "success");
       } else {
         await addBookmark(expert.id);
         setBookmarked(true);
         onBookmarkToggle?.(expert.id, true);
+        onNotification?.("Expert saved to shortlists successfully!", "success");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Bookmark error:", err);
+      onNotification?.(err.message || "Failed to save expert. Please check your connection.", "error");
     } finally {
       setBookmarkLoading(false);
     }
@@ -117,7 +125,10 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
       {/* Bookmark button */}
       <div className="absolute top-3 right-3 z-10">
         <button
-          onClick={handleBookmark}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleBookmark();
+          }}
           disabled={bookmarkLoading}
           className={cn(
             "p-1.5 rounded-lg border transition-all duration-200",
@@ -269,7 +280,10 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
             )}
             {expert.ai_reasoning && (
               <button
-                onClick={() => setExpanded(!expanded)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded(!expanded);
+                }}
                 className={cn(
                   "flex items-center gap-1 text-[11px] font-semibold transition-colors",
                   "px-3 py-1.5 rounded-full border",
@@ -314,7 +328,10 @@ function ExpertCard({ expert, rank, initBookmarked, onBookmarkToggle }: ExpertCa
 
         {/* Expanded details */}
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-zinc-800 animate-fade-in">
+          <div 
+            className="mt-3 pt-3 border-t border-zinc-800 animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             {expert.bio && (
               <>
                 <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5">

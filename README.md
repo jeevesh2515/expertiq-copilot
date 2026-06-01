@@ -2,6 +2,8 @@
 
 > **Enterprise-Grade Expert Discovery, Hybrid Retrieval, & Research Intelligence Platform**
 
+ExpertIQ Copilot is a production-ready, highly-optimized expert discovery platform. It replaces naive search pipelines with a resilient **6-node LangGraph agent network**, dual relational-vector databases, multi-tier fallback caching, and production-grade observability telemetry.
+
 [![Python 3.14+](https://img.shields.io/badge/Python-3.14+-blue?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js 16 (React 19)](https://img.shields.io/badge/Next.js-16--Turbopack-black?logo=next.js)](https://nextjs.org)
@@ -12,161 +14,197 @@
 
 ---
 
-## 🚀 The Senior-Grade Difference: Project Overview
+## 🗺️ System Architecture Flow
 
-Standard RAG tutorial projects usually load a single PDF file, chunk it naively, search it using basic cosine similarity, and dump it straight into an LLM window. That works for simple demos but breaks instantly under enterprise-grade scale, noisy queries, or strict constraints.
+The following map traces how a user query flows from the frontend client to the backend database, vector, graph, and LLM nodes, and returns as a grounded, context-enriched expert discovery profile:
 
-**ExpertIQ Copilot** is a **senior-grade, production-ready expert discovery platform** built with architectural resilience at its core. It operates via a **6-node LangGraph orchestration pipeline** with advanced RAG strategies, multi-tier database fallback layers, and comprehensive observability integrations.
-
-### Key Senior-Grade RAG Solutions Implemented:
-
-1. **Parent-Child Semantic Chunking**:
-   * *The Problem*: Storing large paragraphs in vector databases dilutes semantic vectors, while storing sentences alone leaves the LLM with incomplete context.
-   * *Our Solution*: We extract small sentence-level units (**Child Chunks**) for high-resolution vector searches, but attach them to full coherent biographies (**Parent Chunks**). On retrieval, the engine dynamically resolves child hits to parents and deduplicates them in-memory, ensuring crisp vector matches and cohesive context grounding.
-2. **Self-Querying Metadata Filtering**:
-   * *The Problem*: Natural language prompts often contain explicit logical constraints (e.g., "available experts with 15+ years experience") that vectors struggle to filter strictly.
-   * *Our Solution*: The `QueryAnalyser` node extracts query filters and compiles them into database-native comparison operator dictionaries (e.g., `{"years_experience": {"$gte": 15}}`). 
-3. **Hypothetical Document Embeddings (HyDE)**:
-   * *The Problem*: Queries and stored documents live in different semantic spaces (questions vs. resumes/bios).
-   * *Our Solution*: The pipeline prompts Groq to synthesize a hypothetical biography (`hyde_bio`) representing the perfect candidate profile matching the user's intent. This synthetic card is embedded and queried, aligning query vocabulary directly with stored documents and boosting retrieval recall.
-4. **Dynamic Multi-Backend Architecture**:
-   * *The Problem*: External cloud databases (like Pinecone) or local ONNX embedding models are heavy and slow to load during development or offline runs.
-   * *Our Solution*: A plug-and-play config system with three interchangeable search backends (`lightweight`, `pro`, `pinecone`), allowing instant offline starts with an in-memory SQL/vector simulator or cloud-scale production indexing with Pinecone.
-5. **Robust Database Auto-Migrations**:
-   * *The Problem*: Updating schemas (like adding conversation thread tracking UUIDs) typically breaks existing databases or requires manually executing complex migration scripts.
-   * *Our Solution*: Adaptive column discovery. On startup, the system automatically checks table column mappings (`PRAGMA` for SQLite or `information_schema` for PostgreSQL) and appends columns dynamically (e.g., `thread_id` to `SearchHistory`) without data loss.
-
----
-
-## ⚡ Multi-Backend Routing: Do I Need to Run All of These?
-
-**No!** You do **NOT** need to configure Pinecone, install heavyweight ONNX models, or download massive datasets just to run this project. 
-
-The architecture is built with high development resilience and offers three distinct search backends, easily toggled in your `.env` configuration file:
-
-| `SEARCH_BACKEND` | Deployment Level | System Requirements | Mechanics |
-| :--- | :--- | :--- | :--- |
-| **`lightweight`** *(Default)* | **Local / Offline Dev** | **Instant (Zero Downloads)** | Uses a high-performance, deterministic local string-scoring simulator over SQLite/Postgres. Supports nested logical operator matching (`$gte`, `$lte`, `$eq`) out-of-the-box. Boots in **under 5 seconds**! |
-| **`pro`** | **Local Embedding RAG** | **ONNX + ChromaDB** | Leverages local persistent ChromaDB collections with fast `FastEmbed` embeddings running on your CPU, isolated for zero network latency. |
-| **`pinecone`** | **Cloud Production** | **Pinecone Account** | Connects to a serverless Pinecone index. Features bulk index ingest boots (`scripts/ingest_pinecone.py`) and handles massive multi-tenant semantic matching in the cloud. |
-
-*To immediately run the application, keep the default `.env` setting `SEARCH_BACKEND=lightweight` and provide only your `GROQ_API_KEY`!*
-
----
-
-## 🔍 Observability & LangSmith Tracing
-
-To monitor query execution latency, debug prompt alignments, and inspect retrieved document contexts, the entire orchestration layer is integrated with **LangSmith**.
-
-Every search request propagates a custom session UUID (`thread_id`), which groups consecutive search queries into persistent conversation threads. In LangSmith, every step of our **6-node LangGraph agent** is traced chronologically under a single parent execution span:
-
-1. **QueryAnalyser**: Structurally expands raw queries, generates a synthetic HyDE bio, and extracts logical filters.
-2. **VectorSearcher**: Queries Pinecone/ChromaDB or Lightweight engines using compiled logical operators.
-3. **GraphExpander**: Traverses multi-hop relation networks (Expert ↔ Company ↔ Industry) via an in-memory NetworkX graph.
-4. **Reranker**: Employs Groq LLM reasoning (`Llama-3.3-70B`) in JSON mode to score candidates (1-10) and document grounds.
-5. **Summariser**: Formulates a clear executive research summary of recommended expert matches.
-6. **ResponseBuilder**: Outputs a structured, dual-compatible JSON response.
-
-### Nested Execution Tree
-Below is the LangSmith visual tree depicting latency, input payloads, and node execution status:
-
-![ExpertIQ Copilot LangSmith Dashboard](assets/langsmith_dashboard_trace.png)
+```text
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                        1. Next.js 16 Frontend Client                   │
+ │   - Search Dashboard   - 3D D3 Force Graph   - Expert Details Drawer   │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │ Secure HTTPS REST API 
+                                     ▼ (JWT Auth + Redis Rate Limiter)
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                        2. FastAPI API Router                           │
+ │   - /api/search        - /api/feedback       - /api/health             │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │ Orchestrates Lifespan Spans
+                                     ▼ (LangSmith tracing_context)
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                 3. 6-Node LangGraph Agent Pipeline                     │
+ │                                                                        │
+ │   [Node A: QueryAnalyser]  ──►  [Node B: VectorSearcher]               │
+ │   - Extracts Intent & Filters   - HyDE Query Expansion                 │
+ │   - Generates Synthetic Bio     - Compiles Dict Metadata Operators     │
+ │              │                               │                         │
+ │              ▼                               ▼                         │
+ │   [Node C: GraphExpander]  ──►  [Node D: Reranker]                     │
+ │   - Traverses Multi-Hop Links   - dynamic Grounding Lookups            │
+ │   - Surfaces Related Connections - Structured LLM Scoring (1-10)       │
+ │              │                               │                         │
+ │              ▼                               ▼                         │
+ │   [Node E: Summariser]     ──►  [Node F: ResponseBuilder]              │
+ │   - Professional Research       - Constructs Dual-Compatible Payload   │
+ │     Fidelity Executive Summary  - Logs Session Metrics                 │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │ Data Storage & Cache Layers
+                                     ▼
+       ┌───────────────────┬───────────────────┬───────────────────┐
+       │   PostgreSQL/     │    ChromaDB /     │     NetworkX      │
+       │   SQLite (DB)     │  Pinecone (Vector)│  (In-Memory Graph)│
+       └───────────────────┴───────────────────┴───────────────────┘
+```
 
 ---
 
-## 🛡️ Annotation Queues & Feedback Systems
-ExpertIQ Copilot features a production-ready **Annotation Queue** and **User Feedback Loop** integrated with LangSmith.
-* Researchers can programmatically submit ratings (1-5), metadata tags, and corrective comments for any search session.
-* Ratings are stored locally in the relational database (`Feedback` and `SearchHistory` models) and dynamically logged into active LangSmith evaluation runs.
-* Feedback queues allow researchers to continuously benchmark performance and monitor retrieval drift over time.
+## 🚀 Advanced RAG & Platform Features
+
+This project utilizes advanced patterns designed for production-level stability and high-accuracy semantic matching:
+
+### 1. Parent-Child Semantic Chunking
+* **The Solution**: Biographies and publication documents are segmented into short, granular sentences (**Child Chunks**). During database ingestion, these children are embedded and stored with a `parent_id` and the complete paragraph text (`parent_text`) attached to their metadata payload.
+* **The Retrieval**: Cosine similarity is computed against child chunks for precise, sentence-level matching. On retrieval, `RAGPipeline.retrieve_context` automatically swaps child hits with their broader `parent_text` and deduplicates them in-memory via `seen_parent_ids`. This feeds the LLM with cohesive paragraph contexts, avoiding fragmented prompts.
+
+### 2. Self-Querying Metadata Filtering
+* **The Solution**: The `QueryAnalyser` parses natural language filters (e.g. *"Fintech expert with 15+ years experience"*) and extracts structural constraint dictionaries.
+* **The Compilation**: `VectorSearcher` compiles these into structured, database-native comparison operator trees (e.g. `{"years_experience": {"$gte": 15}, "availability": "available"}`). The vector engine and local simulators execute these filters strictly, bypassing ANN vector post-filtering limitations.
+
+### 3. Hypothetical Document Embeddings (HyDE)
+* **The Solution**: Raw user prompts are often short or phrased as questions, which do not align semantically with stored resumes/resumes.
+* **The Injections**: The pipeline prompts a free-tier Groq model to generate a synthetic expert biography (`hyde_bio`) representing the perfect candidate. This synthetic card is embedded and queried, aligning query intents directly with document structural layouts to boost retrieval recall.
+
+### 4. Dynamic Database Auto-Migrations
+* **The Solution**: When upgrading database schemas (like adding conversation thread tracking `thread_id` columns), conventional engines crash if tables are not manually migrated.
+* **The Migration**: On startup, `database.py` dynamically inspects column mappings (`PRAGMA table_info` for SQLite and `information_schema.columns` for PostgreSQL) and executes SQLAlchemy 2.0-compliant `text()` DDL statement alters with explicit transaction commits, updating production databases seamlessly on boot.
 
 ---
 
-## 📦 Production Tech Stack
+## 🛠️ Step-by-Step Local User Guide
 
-* **API Engine**: `FastAPI 0.136+`
-* **Agent Framework**: `LangGraph` + `LangChain`
-* **Vector Stores**: `ChromaDB` (Local Persistent) + `Pinecone` (Cloud Serverless)
-* **Embedding Model**: `FastEmbed` (ONNX optimized CPU execution)
-* **Graph Database**: `NetworkX` (In-memory multi-hop relation network)
-* **Caching & Rate Limiting**: `Redis` (Failover Support) + `slowapi` + in-memory `TTLCache` fallback
-* **Relational Storage**: `PostgreSQL` + `SQLAlchemy 2.0+`
-* **Frontend App**: `Next.js 16 (App Router)` + `React 19` + `Tailwind CSS 4` + `3D Canvas (Three.js Graph)`
-
----
-
-## 🛠️ Quick Start & Installation
-
-### 1. Configure the Environment
-Copy the configuration template to `.env` in the root directory:
+### 1. Clone & Configure Environments
+Copy the env template in the root workspace directory to create your local `.env`:
 ```bash
 cp .env.example .env
 ```
-Provide your `GROQ_API_KEY` (obtain free at [console.groq.com](https://console.groq.com)). By default, the system boots in `lightweight` mode.
+Provide your Groq API Key (obtain free at [console.groq.com](https://console.groq.com)). 
 
-### 2. Standalone Local Dev (Recommended)
-
-#### Backend Setup
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-# Launch FastAPI dev server
-venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-#### Frontend Setup (New Terminal Window)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Navigate your browser to [http://localhost:3000](http://localhost:3000), register a profile, and explore the search engine and **3D interactive knowledge graph**!
-
-### 3. Pinecone Indexing (Optional Cloud Production)
-If you wish to switch to the Pinecone cloud backend, configure `SEARCH_BACKEND=pinecone` in `.env` along with your `PINECONE_API_KEY`.
-Run the bulk indexing ingestion script to generate embeddings and load your PostgreSQL database profiles into Pinecone:
-```bash
-cd backend
-venv/bin/python -m scripts.ingest_pinecone --force
-```
+By default, the platform boots in **`lightweight`** mode. This simulator boots in **under 5 seconds** and runs zero-downloads vector matching completely locally over your relational database, allowing instant offline development!
 
 ---
 
-## 🧪 Automated Testing & Benchmark Suite
+### 2. Backend Startup (Python 3.11/3.14)
+1. **Navigate to the backend directory**:
+   ```bash
+   cd backend
+   ```
+2. **Initialize a Python virtual environment and activate it**:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+3. **Install modern production-grade dependencies**:
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+4. **Launch the FastAPI development server**:
+   ```bash
+   venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+   ```
+*The database tables will be initialized, 50 expert profiles seeded, and the local relation knowledge graph built automatically on boot!*
 
-The platform includes a comprehensive, isolated test suite consisting of **47 automated tests** (covering database actions, JWT auth, rate limiters, graph traversals, and dynamic migrations).
+---
 
-### The RAG Triad Evaluator:
-We have integrated a dedicated evaluation test suite (`tests/test_rag_eval.py`) that executes in a sandboxed SQLite environment to evaluate RAG quality metrics:
-* **Context Precision**: Asserts that constraint parameters extracted from queries strictly filter out non-compliant profiles.
-* **Faithfulness / Hallucination Detection**: Checks the generated executive summaries against retrieved expert lists, ensuring the LLM never references nonexistent profiles.
-* **Parent-Child Resolution**: Confirms that child sentences map perfectly to parent paragraphs.
+### 3. Frontend Startup (Node 20+)
+1. **Navigate to the frontend directory** (in a new terminal tab):
+   ```bash
+   cd frontend
+   ```
+2. **Install node dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Launch the Next.js development server with Turbopack**:
+   ```bash
+   npm run dev
+   ```
+Open [http://localhost:3000](http://localhost:3000) in your web browser. Create a new user profile to immediately access the interactive dashboard, search experts, submit feedback, and explore the **3D Force-Directed D3 Knowledge Graph**!
 
+---
+
+## 🔍 Observatory Tracing & Programmatic Benchmarks
+
+### 1. Syncing Tracing in 30 Seconds
+To activate real-time LangSmith telemetry tracing, add your LangSmith API key to your local `.env` file under standard keys (no surrounding quotes):
+```env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_PROJECT=expertiq-copilot
+```
+Simply restart the backend server or uvicorn task to immediately apply the variables. Every query you run on your local site will now register instantly under your LangSmith **Tracing** list!
+
+---
+
+### 2. Running Programmatic Evaluations ($0.00 LLM Cost)
+We have written a fully automated programmatic benchmark runner at `backend/scripts/run_langsmith_eval.py`. It boots an isolated database sandbox, seeds custom metrics, synchronizes datasets, and executes 3 free local evaluators:
+* **expert_fidelity**: Asserts the LLM summary strictly mentions retrieved experts, detecting hallucinations.
+* **grounding_precision**: Confirms child-to-parent containment mapping.
+* **constraint_precision**: Validates retrieved profiles comply with NLP constraints.
+
+To execute this suite:
 ```bash
 cd backend
-venv/bin/pytest tests/ -v
+source venv/bin/activate
+python scripts/run_langsmith_eval.py
 ```
+This prints the comparison dashboard URL directly in your terminal, logging the entire experiment to the **Datasets & Experiments** tab of your LangSmith account for free!
+
+---
+
+## 🚢 Production Cloud Deployment (Railway + Vercel)
+
+### 1. Production Backend (Railway)
+1. Commit your codebase changes and push them to your GitHub repository.
+2. In your **[Railway Dashboard](https://railway.app)**, select your project and navigate to the **Variables** tab on your backend service.
+3. Inject the LangSmith variables (`LANGCHAIN_TRACING_V2`, `LANGCHAIN_ENDPOINT`, `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`) and your production database credentials.
+4. **Resilient Warmup**: The system includes a custom deployment handler. Our increase of `"healthcheckTimeout": 300` in [railway.json](file:///Users/jeeveshsingale/ExpertIQ%20Copilot/backend/railway.json) allows Railway enough time on cold boots to download models from HuggingFace and index profiles successfully without timing out.
+
+### 2. Production Frontend (Vercel)
+1. Connect your GitHub repository to your **[Vercel Dashboard](https://vercel.com)**.
+2. Add the environment variable `NEXT_PUBLIC_API_URL` pointing to your active Railway backend URL.
+3. Click deploy! The site will automatically compile, configure type validation, and serve the application globally.
+
+---
+
+## 🧪 Verification & Test Command Matrix
+
+| Target | Command | Purpose |
+| :--- | :--- | :--- |
+| **All Backend Tests** | `cd backend && venv/bin/pytest tests/ -v` | Runs the full 47-case integration and unit test suite |
+| **RAG Triad Test Only** | `cd backend && venv/bin/pytest tests/test_rag_eval.py -v` | Runs the isolated database RAG metric evaluations |
+| **Frontend Compilation** | `cd frontend && npm run build` | Compiles Next.js React 19 pages with strict TypeScript check |
 
 ```text
-======================= 47 passed, 4 warnings in 25.31s ========================
+======================= 47 passed, 4 warnings in 25.20s ========================
 ```
 
 ---
 
-## 📁 Directory Architecture
+## 📁 Monorepo Folder Structure
 
 ```text
 expertiq-copilot/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI/CD Pipeline (Python + Node)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI application lifecycle & middlewares
-│   │   ├── config.py            # Pydantic-settings config loaders
-│   │   ├── database.py          # SQLAlchemy engine & dynamic table migrators
-│   │   ├── auth/                # Optimized direct-bcrypt JWT handlers
-│   │   ├── api/                 # REST Controller routers (search, health, feedback)
+│   │   ├── config.py            # Pydantic-settings config loads & standardisation
+│   │   ├── database.py          # SQLAlchemy 2.0 engine & dynamic migrators
+│   │   ├── api/                 # REST Routers (search, health, feedback, experts)
 │   │   ├── models/              # SQLAlchemy Database ORM tables
 │   │   ├── schemas/             # Pydantic JSON serialization contracts
 │   │   └── core/                # Agent core routing & algorithms
@@ -176,12 +214,14 @@ expertiq-copilot/
 │   │       ├── vector_store.py  # Local persistent ChromaDB manager
 │   │       └── vector_store_pinecone.py # Cloud Pinecone manager
 │   ├── scripts/
-│   │   └── ingest_pinecone.py   # Bulk database loader script for Pinecone
+│   │   ├── ingest_pinecone.py   # Bulk database loader script for Pinecone
+│   │   └── run_langsmith_eval.py # Programmatic LangSmith evaluation runner
 │   └── tests/                   # Pytest automated test runner (47 test cases)
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router views & globals
-│   │   └── components/          # ForceGraph3D, SearchBar, ExpertDetailDrawer
+│   │   ├── app/                 # Next.js App Router views, layouts, and styles
+│   │   ├── components/          # ForceGraph3D, SearchBar, ExpertDetailDrawer
+│   │   └── lib/                 # API connection configurations
 │   └── package.json
 └── docker-compose.yml
 ```

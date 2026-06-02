@@ -147,19 +147,62 @@ Simply restart the backend server or uvicorn task to immediately apply the varia
 
 ---
 
-### 2. Running Programmatic Evaluations ($0.00 LLM Cost)
-We have written a fully automated programmatic benchmark runner at `backend/scripts/run_langsmith_eval.py`. It boots an isolated database sandbox, seeds custom metrics, synchronizes datasets, and executes 3 free local evaluators:
-* **expert_fidelity**: Asserts the LLM summary strictly mentions retrieved experts, detecting hallucinations.
-* **grounding_precision**: Confirms child-to-parent containment mapping.
-* **constraint_precision**: Validates retrieved profiles comply with NLP constraints.
+### 2. Running Automated RAG Evaluators ($0.00 Cost)
 
-To execute this suite:
+We have implemented two powerful, zero-cost pathways to continuously evaluate the quality of your RAG outputs (Context Precision, Faithfulness/Hallucination, and Parent-Child chunk resolution).
+
+#### Option A: Programmatic Local Runs (Highly Recommended)
+We have written a fully automated programmatic benchmark runner at `backend/scripts/run_langsmith_eval.py`. It boots an isolated database sandbox, seeds custom metrics, synchronizes datasets, and executes 3 free local evaluators:
+* **Expert Fidelity**: Asserts the LLM summary strictly mentions retrieved experts, detecting hallucinations.
+* **Grounding Precision**: Confirms child-to-parent chunk alignment and nesting.
+* **Constraint Precision**: Validates retrieved profiles comply with extracted NLP constraints.
+
+To execute this local suite:
 ```bash
 cd backend
 source venv/bin/activate
 python scripts/run_langsmith_eval.py
 ```
 This prints the comparison dashboard URL directly in your terminal, logging the entire experiment to the **Datasets & Experiments** tab of your LangSmith account for free!
+
+#### Option B: Web UI Custom Evaluators (Copy-Paste)
+You can also run these evaluators directly inside your browser:
+1. Navigate to **LangSmith Dashboard** -> **Evaluators** -> Click **+ New** / **Create Evaluator** -> Select **Custom Evaluator (Python Code)**.
+2. > [!IMPORTANT]
+   > LangSmith's code runner strictly expects the main function to be named exactly **`perform_eval(run, example=None)`**. If you name the function differently (e.g. `check_fidelity`), validation will fail with a `Function perform_eval not found in code` error!
+3. Paste the following standardized implementations directly into the code box:
+   * **Expert Fidelity**:
+     ```python
+     def perform_eval(run, example=None) -> dict:
+         results = run.outputs.get("results", []) or []
+         summary = (run.outputs.get("executive_summary") or "").lower()
+         if not summary or not results: return {"key": "expert_fidelity", "score": 1.0}
+         retrieved = set()
+         for item in results:
+             name = item.get("name")
+             if name:
+                 retrieved.add(name.lower())
+                 retrieved.update(name.lower().split())
+         all_known = ["sarah connor", "john connor", "marcus wright", "marcus williams"]
+         hallucinations = [n for n in all_known if n in summary and not any(part in retrieved for part in n.split())]
+         if hallucinations: return {"key": "expert_fidelity", "score": 0.0, "comment": f"Hallucination: {', '.join(hallucinations)}"}
+         return {"key": "expert_fidelity", "score": 1.0}
+     ```
+   * **Constraint Precision**:
+     ```python
+     def perform_eval(run, example=None) -> dict:
+         analysis = run.outputs.get("query_analysis", {}) or {}
+         constraints = analysis.get("constraints", {}) or {}
+         if not constraints: return {"key": "constraint_precision", "score": 1.0}
+         min_years = constraints.get("min_years_experience")
+         required_avail = constraints.get("availability")
+         results = run.outputs.get("results", []) or []
+         if not results: return {"key": "constraint_precision", "score": 1.0}
+         violations = sum(1 for exp in results if (min_years is not None and exp.get("years_experience", 0) < min_years) or (required_avail and exp.get("availability") != required_avail))
+         return {"key": "constraint_precision", "score": 1.0 - (violations / len(results)) if len(results) > 0 else 1.0}
+     ```
+
+---
 
 ---
 

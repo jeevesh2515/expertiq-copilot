@@ -16,6 +16,7 @@
     "clean:frontend": "rm -rf frontend/.next",
     "clean:backend-cache": "rm -rf backend/.pytest_cache backend/chroma_db && find backend -path '*/__pycache__' -type d -prune -exec rm -rf {} +",
     "clean:caches": "npm run clean:frontend && npm run clean:backend-cache",
-    "install:all": "npm install --prefix frontend && cd backend && venv/bin/pip install -r requirements.txt"
+    "install:all": "npm install --prefix frontend && cd backend && venv/bin/pip install -r requirements.txt",
+    "eval:ragas": "cd backend && venv/bin/python -m scripts.run_ragas_eval"
   }
 }

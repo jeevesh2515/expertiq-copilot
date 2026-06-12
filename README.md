@@ -107,7 +107,7 @@ LANGCHAIN_API_KEY=your_langsmith_api_key_here
 LANGCHAIN_PROJECT=expertiq-copilot
 ```
 
-### 2. Running Automated RAG Evaluators
+### 2. Running Automated RAG Evaluators (Deterministic Heuristics)
 We have implemented two zero-cost pathways to continuously evaluate the quality of your RAG outputs.
 
 #### Programmatic Local Runs (Recommended)
@@ -181,6 +181,33 @@ def perform_eval(run, example=None) -> dict:
 ```
 </details>
 
+### 3. RAGAs Offline Evaluation Harness (3 Metrics, Logged to LangSmith)
+
+ExpertIQ features an integrated RAGAs offline evaluation suite that automatically runs against a golden dataset (`backend/tests/eval/eval_dataset.json`) to compute 3 core metrics:
+1. **Answer Relevancy**: Evaluates if the generated summary is relevant to the user query.
+2. **Faithfulness**: Measures if the summary is strictly grounded in retrieved contexts (detects hallucinations).
+3. **Context Precision**: Evaluates if the retrieved relevant expert context chunks are ranked high.
+
+Scores are pushed as feedback run tags to LangSmith.
+
+#### Run Evaluation (CLI Script)
+From the root directory:
+```bash
+npm run eval:ragas
+```
+Or directly from the `backend/` directory:
+```bash
+cd backend
+venv/bin/python -m scripts.run_ragas_eval
+```
+
+#### Run Evaluation (Pytest)
+You can run the RAGAs evaluation as part of the pytest suite:
+```bash
+cd backend
+RUN_RAGAS_EVAL=true venv/bin/pytest tests/eval/test_ragas_eval.py -v -m ragas
+```
+
 ---
 
 ## 🚢 Production Deployment
@@ -204,6 +231,8 @@ def perform_eval(run, example=None) -> dict:
 | :--- | :--- | :--- |
 | **All Backend Tests** | `cd backend && venv/bin/pytest tests/ -v` | Runs the full 47-case integration and unit test suite |
 | **RAG Triad Test Only** | `cd backend && venv/bin/pytest tests/test_rag_eval.py -v` | Runs the isolated database RAG metric evaluations |
+| **RAGAs Eval (Pytest)** | `cd backend && RUN_RAGAS_EVAL=true venv/bin/pytest tests/eval/test_ragas_eval.py -v -m ragas` | Runs the offline RAGAs evaluation suite with thresholds |
+| **RAGAs Eval (CLI Script)** | `npm run eval:ragas` | Runs the offline RAGAs evaluation CLI script |
 | **Frontend Compilation** | `cd frontend && npm run build` | Compiles Next.js React 19 pages with strict TypeScript check |
 
 ---
@@ -228,8 +257,10 @@ expertiq-copilot/
 │   │       └── vector_store_pinecone.py # Cloud Pinecone manager
 │   ├── scripts/
 │   │   ├── ingest_pinecone.py   # Bulk database loader script for Pinecone
-│   │   └── run_langsmith_eval.py # Programmatic LangSmith evaluation runner
+│   │   ├── run_langsmith_eval.py # Programmatic LangSmith evaluation runner
+│   │   └── run_ragas_eval.py    # Standalone RAGAs evaluation runner
 │   └── tests/                   # Pytest automated test runner (47 test cases)
+│       └── eval/                # RAGAs evaluation golden dataset and pytest suite
 ├── frontend/
 │   ├── src/
 │   │   ├── app/                 # Next.js App Router views, layouts, and styles

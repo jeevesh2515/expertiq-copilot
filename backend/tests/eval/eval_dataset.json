@@ -1,0 +1,62 @@
+{
+  "description": "Golden evaluation dataset for ExpertIQ RAGAs harness. Each example exercises a different industry and query pattern from the 50 seed experts.",
+  "version": "1.0.0",
+  "examples": [
+    {
+      "id": "eval-001",
+      "question": "Find experts in algorithmic trading and quantitative finance with machine learning experience",
+      "ground_truth_expert_names": ["Dr. Sophia Chen", "Thomas Mueller", "David Petrov"],
+      "expected_topics": ["algorithmic trading", "quantitative finance", "machine learning"],
+      "expected_industry": "FinTech"
+    },
+    {
+      "id": "eval-002",
+      "question": "Who are the top AI diagnostics and medical imaging experts available for consulting?",
+      "ground_truth_expert_names": ["Dr. Amanda Foster", "Dr. Yuki Tanaka"],
+      "expected_topics": ["AI diagnostics", "medical imaging", "clinical trials"],
+      "expected_industry": "HealthTech"
+    },
+    {
+      "id": "eval-003",
+      "question": "Find carbon capture and direct air capture technology researchers",
+      "ground_truth_expert_names": ["Dr. James Thornton", "Dr. Henrik Lindgren"],
+      "expected_topics": ["carbon capture", "direct air capture", "negative emissions"],
+      "expected_industry": "Climate Tech"
+    },
+    {
+      "id": "eval-004",
+      "question": "Looking for adaptive learning and educational AI experts with cognitive science background",
+      "ground_truth_expert_names": ["Dr. Victoria Oduya", "Dr. Mei-Ling Wu", "Dr. Amara Diallo"],
+      "expected_topics": ["adaptive learning", "educational AI", "learning science"],
+      "expected_industry": "EdTech"
+    },
+    {
+      "id": "eval-005",
+      "question": "Find blockchain and DeFi experts who understand CBDC architecture and tokenisation",
+      "ground_truth_expert_names": ["Elena Korovkina"],
+      "expected_topics": ["blockchain", "DeFi", "CBDCs", "tokenisation"],
+      "expected_industry": "FinTech"
+    },
+    {
+      "id": "eval-006",
+      "question": "Who specialises in green hydrogen production and electrolysis technology?",
+      "ground_truth_expert_names": ["Dr. Kenji Watanabe"],
+      "expected_topics": ["green hydrogen", "electrolysis", "fuel cells"],
+      "expected_industry": "Climate Tech"
+    },
+    {
+      "id": "eval-007",
+      "question": "Find regulatory compliance and AML/KYC fraud detection specialists in fintech",
+      "ground_truth_expert_names": ["Priya Patel"],
+      "expected_topics": ["regulatory compliance", "AML/KYC", "fraud detection"],
+      "expected_industry": "FinTech"
+    },
+    {
+      "id": "eval-008",
+      "question": "Looking for VR and AR education technology experts with immersive learning experience",
+      "ground_truth_expert_names": ["Carlos Mendoza"],
+      "expected_topics": ["VR/AR education", "immersive learning", "3D simulation"],
+      "expected_industry": "EdTech"
+    }
+  ]
+}

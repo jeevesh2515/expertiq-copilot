@@ -830,14 +830,20 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
   // Get connected node names for tooltip
   const getConnectedNames = (nodeId: string) => {
     const { links, nodeMap } = simRef.current;
-    const connected: string[] = [];
+    const connected: { id: string; label: string }[] = [];
+    const seen = new Set<string>();
     for (const link of links) {
+      let targetId: string | null = null;
       if (link.sourceNode.id === nodeId) {
-        const n = nodeMap.get(link.targetNode.id);
-        if (n) connected.push(n.label);
+        targetId = link.targetNode.id;
       } else if (link.targetNode.id === nodeId) {
-        const n = nodeMap.get(link.sourceNode.id);
-        if (n) connected.push(n.label);
+        targetId = link.sourceNode.id;
+      }
+
+      if (targetId && !seen.has(targetId)) {
+        seen.add(targetId);
+        const n = nodeMap.get(targetId);
+        if (n) connected.push({ id: n.id, label: n.label });
       }
     }
     return connected.slice(0, 5);
@@ -1061,8 +1067,8 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
               )}
               {tooltipNode.degree > 0 && (
                 <div className="mt-1.5 pt-1.5 border-t border-zinc-800 flex flex-wrap gap-1">
-                  {getConnectedNames(tooltipNode.id).map((name) => (
-                    <span key={name} className="text-[9px] px-1.5 py-0.5 bg-zinc-800 rounded text-zinc-400 truncate max-w-[90px]">{name}</span>
+                  {getConnectedNames(tooltipNode.id).map((item) => (
+                    <span key={item.id} className="text-[9px] px-1.5 py-0.5 bg-zinc-800 rounded text-zinc-400 truncate max-w-[90px]">{item.label}</span>
                   ))}
                 </div>
               )}

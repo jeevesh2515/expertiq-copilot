@@ -94,6 +94,15 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) to access the interactive dashboard, search experts, and explore the **3D Force-Directed D3 Knowledge Graph**!
 
+### 🐳 4. Unified Docker Compose Deployment (1-Command Boot)
+To run the full stack (PostgreSQL, FastAPI backend, ChromaDB vector store, and Next.js frontend) with a single command:
+```bash
+docker compose up --build -d
+```
+The unified platform will be accessible at:
+- **Frontend Workstation**: [http://localhost:3000](http://localhost:3000)
+- **FastAPI API & OpenAPI Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
 ---
 
 ## 🔍 Observatory Tracing & Evaluation

@@ -3,7 +3,6 @@ Interactions API — bookmarks and search history.
 """
 
 import logging
-from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select

@@ -8,7 +8,8 @@ semantic search → graph expansion → LLM re-ranking → summary.
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+import uuid
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.auth.dependencies import get_current_user
@@ -67,7 +68,7 @@ async def search_experts(
         return cached_response
 
     try:
-        import uuid
+        import uuid  # noqa: F811 — local import kept for parity with cache path above
         langsmith_run_id = str(uuid.uuid4())
         thread_id = search_request.thread_id or str(uuid.uuid4())
 
@@ -140,7 +141,7 @@ async def stream_search_experts(
         agent = get_agent()
         thread_id = search_request.thread_id or str(uuid.uuid4())
         logger.info(f"Starting search stream for user {current_user.id}")
-        
+
         async def wrapped_stream():
             logger.info("Initializing wrapped_stream generator")
             import langsmith as ls
@@ -158,7 +159,7 @@ async def stream_search_experts(
                             results_data["thread_id"] = thread_id
                             payload["data"] = results_data
                             event = f"data: {json.dumps(payload)}\n\n"
-                            
+
                             h = SearchHistory(
                                 user_id=current_user.id,
                                 query_text=search_request.query,

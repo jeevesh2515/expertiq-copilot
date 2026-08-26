@@ -7,7 +7,7 @@ for the RAG pipeline.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -129,7 +129,7 @@ class VectorStore:
                 c_id = f"{parent_id}_c{idx}"
                 child_ids.append(c_id)
                 child_texts.append(sentence)
-                
+
                 # Enrich child metadata with parent references
                 c_meta = {
                     **meta,

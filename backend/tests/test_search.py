@@ -174,7 +174,7 @@ class TestVectorStoreRetriever:
         """Assert that ChromaDB search returns page_content and type for LangSmith compatibility."""
         from app.core.vector_store import get_vector_store
         vs = get_vector_store()
-        
+
         # Test search_experts
         experts = vs.search_experts(query="FinTech", top_k=2)
         if experts:
@@ -234,11 +234,11 @@ class TestConversationThreads:
             headers=auth_headers,
         )
         assert response.status_code in [200, 500]
-        
+
         # Query SearchHistory table directly
         from app.database import SessionLocal
         from app.models.interaction import SearchHistory
-        
+
         db = SessionLocal()
         try:
             records = db.query(SearchHistory).filter(SearchHistory.thread_id == thread_id).all()

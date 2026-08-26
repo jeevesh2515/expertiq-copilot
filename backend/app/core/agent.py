@@ -83,7 +83,7 @@ def _call_groq(prompt: str, max_tokens: int = 2000, response_format: Optional[Di
             }
             if response_format:
                 kwargs["response_format"] = response_format
-                
+
             response = client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as exc:  # pragma: no cover - network-dependent
@@ -328,15 +328,15 @@ Return ONLY valid JSON, no other text.""",
 def vector_searcher(state: AgentState) -> AgentState:
 
     query = state["query"]
-    
+
     # 1. HyDE Query Expansion: use the generated hypothetical bio if available
     hyde_bio = state.get("query_analysis", {}).get("hyde_bio", query)
-    
+
     # 2. Self-Querying: Compile natural language constraints into database filters
     filters = {}
     if state.get("filters"):
         filters.update(state["filters"])
-        
+
     constraints = state.get("query_analysis", {}).get("constraints", {})
     min_years = constraints.get("min_years_experience")
     if min_years is not None:
@@ -344,7 +344,7 @@ def vector_searcher(state: AgentState) -> AgentState:
     avail = constraints.get("availability")
     if avail:
         filters["availability"] = avail
-        
+
     # Clean up empty filters
     if not filters:
         filters = None
@@ -672,11 +672,11 @@ def summariser(state: AgentState) -> AgentState:
 
         summary = _call_groq(
             f"""You are a research analyst summarizing expert discovery results for a query: "{query}"
-            
+
             Here are the top 3 ranked experts:
             {chr(10).join(expert_details)}
-            
-            Write a professional 100-word executive summary. 
+
+            Write a professional 100-word executive summary.
             - Start by stating how well the top candidates match the query using their actual match scores.
             - Mention each of the top 3 experts by name and briefly why they are recommended.
             - Maintain absolute fidelity to the scores provided.
@@ -742,25 +742,25 @@ def response_builder(state: AgentState) -> AgentState:
             industry = meta.get("industry", "Technology")
             company = meta.get("company", "Independent")
             topics = meta.get("topics", "")
-            
+
             if isinstance(topics, str):
                 topics = [t.strip() for t in topics.split(",") if t.strip()]
-                
+
             nodes.append({"id": expert_id, "label": name, "type": "expert"})
-            
+
             if industry and industry != "N/A":
                 nodes.append({"id": f"ind_{industry}", "label": industry, "type": "industry"})
                 edges.append({"source": expert_id, "target": f"ind_{industry}", "relationship": "works_in"})
-                
+
             if company and company != "N/A":
                 nodes.append({"id": f"comp_{company}", "label": company, "type": "company"})
                 edges.append({"source": expert_id, "target": f"comp_{company}", "relationship": "works_at"})
-                
+
             for t in (topics[:3] if isinstance(topics, list) else []):
                 if t:
                     nodes.append({"id": f"topic_{t}", "label": t, "type": "topic"})
                     edges.append({"source": expert_id, "target": f"topic_{t}", "relationship": "specializes_in"})
-                    
+
         unique_nodes = list({n["id"]: n for n in nodes}.values())
         graph_data = {
             "nodes": unique_nodes[:settings.GRAPH_MAX_RESPONSE_NODES],

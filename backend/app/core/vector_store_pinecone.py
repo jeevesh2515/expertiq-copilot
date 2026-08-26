@@ -7,7 +7,6 @@ leveraging the official Pinecone serverless cloud architecture.
 
 import json
 import logging
-from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from cachetools import TTLCache
@@ -62,7 +61,7 @@ class PineconeVectorStore:
                     )
                 )
                 logger.info(f"✓ Pinecone index {settings.PINECONE_INDEX_NAME} created successfully.")
-            
+
             self._index = self._client.Index(settings.PINECONE_INDEX_NAME)
             logger.info(f"PineconeVectorStore initialized for index: {settings.PINECONE_INDEX_NAME}")
         except Exception as e:
@@ -165,7 +164,7 @@ class PineconeVectorStore:
     def _format_filters(self, filters: Dict[str, Any]) -> Dict[str, Any]:
         """
         Format filters from ChromaDB style to Pinecone style.
-        
+
         ChromaDB uses {"$in": [...]} style which is fully compatible with Pinecone.
         If any simple equality operators are present, ensure they map properly.
         """
@@ -197,10 +196,10 @@ class PineconeVectorStore:
 
         try:
             embedding = self._embedding_service.embed_text(embedding_text)
-            
+
             # Ensure metadata has the content as a field for RAG reconstruction
             pc_metadata = {**metadata, "bio": metadata.get("bio", embedding_text)}
-            
+
             namespace = settings.PINECONE_NAMESPACE or None
             self._index.upsert(
                 vectors=[(expert_id, embedding, pc_metadata)],
@@ -243,7 +242,7 @@ class PineconeVectorStore:
             # Upsert to Pinecone in chunks
             for i in range(0, len(expert_ids), batch_size):
                 batch_end = min(i + batch_size, len(expert_ids))
-                
+
                 batch_vectors = []
                 for idx in range(i, batch_end):
                     meta = metadatas[idx]

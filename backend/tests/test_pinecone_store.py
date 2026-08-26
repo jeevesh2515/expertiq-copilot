@@ -74,7 +74,7 @@ def test_pinecone_semantic_search(mock_pinecone_class, mock_get_embedding, mock_
     mock_index_desc = MagicMock()
     mock_index_desc.name = "test-index"
     mock_pc_client.list_indexes.return_value = [mock_index_desc]
-    
+
     # Mock search results returned by Pinecone query()
     mock_match = MagicMock()
     mock_match.id = "exp-123"
@@ -85,13 +85,13 @@ def test_pinecone_semantic_search(mock_pinecone_class, mock_get_embedding, mock_
         "company": "FastPay",
         "bio": "Expert bio string."
     }
-    
+
     mock_query_response = MagicMock()
     mock_query_response.matches = [mock_match]
     mock_index = MagicMock()
     mock_index.query.return_value = mock_query_response
     mock_pc_client.Index.return_value = mock_index
-    
+
     mock_pinecone_class.return_value = mock_pc_client
     mock_get_embedding.return_value = mock_embedding_service
 
@@ -130,7 +130,7 @@ def test_pinecone_upsert_expert(mock_pinecone_class, mock_get_embedding, mock_se
     mock_index_desc = MagicMock()
     mock_index_desc.name = "test-index"
     mock_pc_client.list_indexes.return_value = [mock_index_desc]
-    
+
     mock_index = MagicMock()
     mock_pc_client.Index.return_value = mock_index
     mock_pinecone_class.return_value = mock_pc_client
@@ -170,7 +170,7 @@ def test_pinecone_delete_expert(mock_pinecone_class, mock_get_embedding, mock_se
     mock_index_desc = MagicMock()
     mock_index_desc.name = "test-index"
     mock_pc_client.list_indexes.return_value = [mock_index_desc]
-    
+
     mock_index = MagicMock()
     mock_pc_client.Index.return_value = mock_index
     mock_pinecone_class.return_value = mock_pc_client

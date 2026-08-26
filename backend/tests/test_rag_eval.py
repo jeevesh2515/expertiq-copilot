@@ -72,17 +72,17 @@ def setup_db():
         ]
         db.add_all(experts)
         db.commit()
-        
+
         # Prewarm vectors and document chunks
         seed_document_chunks(db)
-        
+
         from app.core.lightweight_search import get_lightweight_search_engine
         search_engine = get_lightweight_search_engine()
         search_engine.refresh([e.to_dict() for e in experts])
-        
+
     finally:
         db.close()
-    
+
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -91,10 +91,10 @@ def test_parent_child_resolution_and_deduplication() -> None:
     """Assert child sentences resolve to full parent bios with no duplicates."""
     from app.core.vector_store import get_vector_store
     vs = get_vector_store()
-    
+
     # Chroma document collection should now be seeded with child chunks
     assert vs.get_document_count() > 0
-    
+
     # Verify child chunks map to parent metadata
     docs = vs.search_documents(query="cryptographic banking", top_k=5)
     assert len(docs) > 0
@@ -117,19 +117,19 @@ def test_parent_child_resolution_and_deduplication() -> None:
 def test_self_query_constraints_context_precision() -> None:
     """Verify that QueryAnalyser extracts constraints and VectorSearcher filters them strictly."""
     agent = get_agent()
-    
+
     # 1. Test query with years experience constraint
     state = agent.run(
         query="Who is an available Fintech expert with 15+ years experience?",
         top_k=5
     )
-    
+
     # Extract query analysis constraints
     analysis = state.get("query_analysis", {})
     assert "constraints" in analysis
     assert analysis["constraints"]["min_years_experience"] == 15
     assert analysis["constraints"]["availability"] == "available"
-    
+
     # Validate result precision: all retrieved results must meet constraints
     results = state.get("results", [])
     assert len(results) > 0
@@ -146,11 +146,11 @@ def test_faithfulness_and_hallucination_prevention() -> None:
         query="Find experts in neural networks and cybernetics systems",
         top_k=5
     )
-    
+
     results = state.get("results", [])
     retrieved_names = {exp["name"] for exp in results}
     summary = state.get("executive_summary") or ""
-    
+
     if summary and results:
         # Check hallucination: summary must not reference names not retrieved
         # For instance, SarahConnor shouldn't be referenced if she wasn't retrieved

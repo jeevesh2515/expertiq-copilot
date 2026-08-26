@@ -71,7 +71,7 @@ class RAGPipeline:
                 if parent_id in seen_parent_ids:
                     continue
                 seen_parent_ids.add(parent_id)
-                
+
             content = chunk.get("metadata", {}).get("parent_text") or chunk["content"]
             source_type = chunk.get("metadata", {}).get("source_type", "document")
             expert_name = chunk.get("metadata", {}).get("expert_name", "Unknown")
@@ -148,7 +148,7 @@ def seed_document_chunks(db) -> int:
     """
     from app.core.vector_store import get_vector_store
     vs = get_vector_store()
-    
+
     # Check if already seeded to avoid redundant embedding generation
     try:
         if vs.get_document_count() > 0:

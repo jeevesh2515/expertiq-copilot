@@ -42,7 +42,7 @@ def seed_expert(client: TestClient, auth_headers: dict) -> str:
     """Create an expert profile in the db and return its ID."""
     from app.database import SessionLocal
     from app.models.expert import Expert
-    
+
     db = SessionLocal()
     try:
         expert = Expert(

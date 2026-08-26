@@ -4,7 +4,6 @@ Authentication routes: register, login, refresh, and profile.
 Passwords are hashed with bcrypt (12 rounds) via passlib.
 """
 
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 import bcrypt

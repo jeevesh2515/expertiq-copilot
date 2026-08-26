@@ -57,7 +57,7 @@ if not use_fallback and not db_url.startswith("sqlite"):
         engine_kwargs["max_overflow"] = 20
         engine_kwargs["pool_recycle"] = 3600
         engine_kwargs["pool_pre_ping"] = True
-        
+
         test_engine = create_engine(db_url, **engine_kwargs)
         # Force a quick connection test
         with test_engine.connect() as conn:
@@ -72,8 +72,20 @@ if not use_fallback and not db_url.startswith("sqlite"):
         )
         use_fallback = True
 
-# 4. Fallback implementation if PostgreSQL check failed
-if use_fallback or db_url.startswith("sqlite"):
+# 4. Fallback implementation if PostgreSQL check failed.
+# NOTE: never clobber an explicit SQLite URL (e.g. the pytest-isolated
+# expertiq_test.db) with the generic fallback file — doing so made full
+# test-suite runs share a stale database and fail with "no such table".
+if db_url.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+    from sqlalchemy.pool import StaticPool
+    engine = create_engine(
+        db_url,
+        connect_args=connect_args,
+        poolclass=StaticPool,
+        echo=False
+    )
+elif use_fallback:
     db_url = fallback_db_url
     connect_args["check_same_thread"] = False
     # Use StaticPool to ensure database connections behave correctly in multi-threaded Uvicorn
@@ -110,7 +122,6 @@ def get_db() -> Session:
 def init_db() -> None:
     """Create all tables defined by ORM models."""
     # Import all models here to register them with Base
-    import app.models
     Base.metadata.create_all(bind=engine)
 
     # Dynamic Column Migration: check if search_history is missing the thread_id column and add it safely

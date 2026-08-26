@@ -1,0 +1,15 @@
+# Ruff configuration — pragmatic lint profile for ExpertIQ Copilot backend.
+# Strict correctness rules enforced (F, B008-lite); stylistic/modernization
+# rules relaxed to keep CI green on the existing codebase.
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+  "E501",  # long lines
+  "E402",  # module imports after env setup (config.py, database.py do this deliberately)
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["F401"]  # unused imports common in test fixtures

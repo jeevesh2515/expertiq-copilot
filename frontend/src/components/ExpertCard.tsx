@@ -2,7 +2,6 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 import {
-  Bookmark as BookmarkIcon,
   Building2,
   ChevronDown,
   ChevronUp,
@@ -102,9 +101,9 @@ function ExpertCard({ expert, rank, initBookmarked, onNotification, onBookmarkTo
         onBookmarkToggle?.(expert.id, true);
         onNotification?.("Expert saved to shortlists successfully!", "success");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Bookmark error:", err);
-      onNotification?.(err.message || "Failed to save expert. Please check your connection.", "error");
+      onNotification?.(err instanceof Error ? err.message : "Failed to save expert. Please check your connection.", "error");
     } finally {
       setBookmarkLoading(false);
     }

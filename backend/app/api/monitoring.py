@@ -12,11 +12,13 @@ import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, status
-from app.core.monitoring import get_monitoring, SearchMetrics
+from app.config import get_settings
+from app.core.monitoring import get_monitoring
 from app.core.vector_store_pro import get_production_vector_store
 from app.core.embeddings_pro import get_production_embedding_service
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 router = APIRouter(prefix="/api", tags=["Monitoring"])
 
@@ -32,7 +34,7 @@ router = APIRouter(prefix="/api", tags=["Monitoring"])
 async def health_check() -> Dict[str, Any]:
     """
     Basic health check endpoint.
-    
+
     Returns:
         Health status and component information
     """
@@ -72,14 +74,14 @@ async def health_check() -> Dict[str, Any]:
 async def system_metrics() -> Dict[str, Any]:
     """
     Get system performance metrics.
-    
+
     Returns:
         Performance summary and resource usage
     """
     try:
         monitoring = get_monitoring()
         embedding_service = get_production_embedding_service()
-        
+
         if settings.SEARCH_BACKEND == "pinecone":
             from app.core.vector_store_pinecone import get_pinecone_vector_store
             vector_store_metrics = get_pinecone_vector_store().get_metrics()
@@ -115,7 +117,7 @@ async def system_metrics() -> Dict[str, Any]:
 async def search_metrics() -> Dict[str, Any]:
     """
     Get search pipeline performance metrics.
-    
+
     Returns:
         Detailed search statistics
     """
@@ -152,7 +154,7 @@ async def search_metrics() -> Dict[str, Any]:
 async def prometheus_metrics() -> str:
     """
     Get metrics in Prometheus format.
-    
+
     Returns:
         Prometheus-formatted metrics text
     """

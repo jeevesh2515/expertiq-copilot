@@ -8,7 +8,6 @@ topics, publications, and bios.
 Run standalone: python -m app.data.seed_experts
 """
 
-import json
 import logging
 from typing import Any, Dict, List
 

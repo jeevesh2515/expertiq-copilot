@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.api.experts import router as experts_router
 from app.api.health import router as health_router
@@ -30,7 +29,6 @@ from app.auth.routes import router as auth_router
 from app.config import get_settings
 from app.database import SessionLocal, init_db
 from app.models.expert import Expert
-from app.core.monitoring import get_monitoring
 from app.core.limiter import limiter
 
 settings = get_settings()

@@ -8,7 +8,6 @@ Environment-specific settings for production deployment:
 - Monitoring
 """
 
-from typing import Optional
 from pydantic_settings import BaseSettings
 
 

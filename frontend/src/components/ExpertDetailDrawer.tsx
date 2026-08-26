@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo } from "react";
 import {
   GraduationCap,
   Building2,
-  Bookmark as BookmarkIcon,
   Star,
   X,
   Sparkles,
@@ -103,9 +102,9 @@ export default function ExpertDetailDrawer({
         onBookmarkToggle?.(expert.id, true);
         onNotification?.("Expert saved to shortlists successfully!", "success");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Bookmark error inside drawer:", err);
-      onNotification?.(err.message || "Failed to save expert. Please check your connection.", "error");
+      onNotification?.(err instanceof Error ? err.message : "Failed to save expert. Please check your connection.", "error");
     } finally {
       setBookmarkLoading(false);
     }
@@ -128,9 +127,9 @@ export default function ExpertDetailDrawer({
       });
       setFeedbackSubmitted(true);
       onNotification?.("Feedback submitted successfully!", "success");
-    } catch (err: any) {
-      setFeedbackError(err.message || "Failed to record feedback. Please try again.");
-      onNotification?.(err.message || "Failed to submit feedback.", "error");
+    } catch (err: unknown) {
+      setFeedbackError(err instanceof Error ? err.message : "Failed to record feedback. Please try again.");
+      onNotification?.(err instanceof Error ? err.message : "Failed to submit feedback.", "error");
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -298,7 +297,7 @@ export default function ExpertDetailDrawer({
                         )}
                       </div>
                       <p className="text-xs leading-6 text-zinc-400 font-medium break-words italic pl-2.5 border-l-2 border-red-500/30">
-                        "{highlightOverlap(src.content, query)}"
+                        &quot;{highlightOverlap(src.content, query)}&quot;
                       </p>
                     </div>
                   ))}
@@ -347,7 +346,7 @@ export default function ExpertDetailDrawer({
               <div className="text-left">
                 <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-300">Share Your Feedback</h4>
                 <p className="text-[11px] text-zinc-500 mt-1 leading-normal">
-                  Rate this expert's relevance to your research request to help us improve discovery quality.
+                  Rate this expert&apos;s relevance to your research request to help us improve discovery quality.
                 </p>
               </div>
 

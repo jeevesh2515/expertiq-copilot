@@ -199,15 +199,15 @@ class LightweightSearchEngine:
         for key, value in filters.items():
             if value in (None, ""):
                 continue
-            
+
             expert_val = expert.get(key)
-            
+
             # Handle dictionary-based operators (e.g. {"$gte": 15})
             if isinstance(value, dict):
                 for op, op_val in value.items():
                     if op_val in (None, ""):
                         continue
-                    
+
                     # Convert to numeric if possible for comparisons
                     try:
                         expert_num = float(expert_val) if expert_val is not None else 0.0
@@ -215,7 +215,7 @@ class LightweightSearchEngine:
                         is_numeric = True
                     except (ValueError, TypeError):
                         is_numeric = False
-                    
+
                     if op == "$gte":
                         if is_numeric:
                             if not (expert_num >= op_num):

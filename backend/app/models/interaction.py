@@ -2,14 +2,17 @@
 Interaction models for bookmarks and search history.
 """
 
-import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.expert import Expert
+    from app.models.user import User
 
 
 class Bookmark(Base):

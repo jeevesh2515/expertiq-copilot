@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -365,7 +364,7 @@ class RagasEvaluator:
 
         logger.info(f"🔬 Starting RAGAs evaluation: {exp_name}")
         logger.info(f"   Dataset: {dataset_path}")
-        logger.info(f"   Metrics: answer_relevancy, faithfulness, context_precision")
+        logger.info("   Metrics: answer_relevancy, faithfulness, context_precision")
 
         # ── Ensure database is initialized and seeded ──────────────────
         from app.database import Base, engine, SessionLocal
@@ -383,7 +382,7 @@ class RagasEvaluator:
             seed_experts(db_session)
             # Seed document chunks for context retrieval grounding
             seed_document_chunks(db_session)
-            
+
             # Force refresh search engine to avoid stale in-memory index
             search_engine = get_lightweight_search_engine()
             experts = [expert.to_dict() for expert in db_session.query(Expert).all()]

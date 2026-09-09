@@ -2,7 +2,7 @@
 """
 Automated LangSmith programmatic evaluation runner.
 
-Bootstraps the backend database sandbox, registers free local evaluators, 
+Bootstraps the backend database sandbox, registers free local evaluators,
 syncs/creates the RAG benchmark dataset in LangSmith, and runs the evaluation suite.
 
 Usage:
@@ -44,10 +44,10 @@ def check_fidelity(run: Any, example: Any = None) -> Dict[str, Any]:
     outputs = run.outputs
     if not outputs:
         return {"key": "expert_fidelity", "score": 1.0, "comment": "No outputs found"}
-        
+
     results = outputs.get("results", [])
     summary = (outputs.get("executive_summary") or "").lower()
-    
+
     if not summary or not results:
         return {"key": "expert_fidelity", "score": 1.0, "comment": "No summary or results to evaluate"}
 
@@ -60,20 +60,20 @@ def check_fidelity(run: Any, example: Any = None) -> Dict[str, Any]:
 
     # List of all seeded test expert names
     all_known_names = ["sarah connor", "john connor", "marcus wright"]
-    
+
     hallucinations = []
     for name in all_known_names:
         if name in summary:
             if not any(part in retrieved_names for part in name.split()):
                 hallucinations.append(name)
-                
+
     if hallucinations:
         return {
             "key": "expert_fidelity",
             "score": 0.0,
             "comment": f"Hallucination detected: Summary referenced non-retrieved experts: {', '.join(hallucinations)}"
         }
-        
+
     return {
         "key": "expert_fidelity",
         "score": 1.0,
@@ -86,7 +86,7 @@ def check_parent_child_grounding(run: Any, example: Any = None) -> Dict[str, Any
     outputs = run.outputs
     if not outputs:
         return {"key": "grounding_precision", "score": 1.0, "comment": "No outputs found"}
-        
+
     results = outputs.get("results", [])
     if not results:
         return {"key": "grounding_precision", "score": 1.0, "comment": "No results found"}
@@ -103,7 +103,7 @@ def check_constraint_precision(run: Any, example: Any = None) -> Dict[str, Any]:
     outputs = run.outputs
     if not outputs:
         return {"key": "constraint_precision", "score": 1.0, "comment": "No outputs found"}
-        
+
     analysis = outputs.get("query_analysis", {})
     constraints = analysis.get("constraints", {})
     if not constraints:
@@ -185,7 +185,7 @@ def main() -> None:
     logger.info("Setting up database sandbox tables...")
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
-    
+
     try:
         # Clear collections to guarantee test isolation
         from app.core.vector_store import get_vector_store
@@ -241,10 +241,10 @@ def main() -> None:
         ]
         db.add_all(experts)
         db.commit()
-        
+
         # Prewarm vectors and document chunks
         seed_document_chunks(db)
-        
+
         search_engine = get_lightweight_search_engine()
         search_engine.refresh([e.to_dict() for e in experts])
         logger.info("✓ Seeding and prewarming complete.")
@@ -260,7 +260,7 @@ def main() -> None:
                 dataset_name=dataset_name,
                 description="Evaluation benchmark dataset for ExpertIQ Copilot RAG constraints, fidelity, and grounding."
             )
-            
+
             # Define exact input test cases matching constraints
             test_cases = [
                 {"query": "Who is an available Fintech expert with 15+ years experience?"},
@@ -268,7 +268,7 @@ def main() -> None:
                 {"query": "Find a Fintech expert specializing in cryptographic banking protocols."},
                 {"query": "Who is a RegTech developer working on regulatory compliance?"}
             ]
-            
+
             ls_client.create_examples(
                 inputs=test_cases,
                 outputs=[
@@ -286,8 +286,8 @@ def main() -> None:
         # 4. Trigger LangSmith evaluate pipeline
         logger.info("Running programmatic evaluations on LangSmith...")
         from langsmith.evaluation import evaluate
-        
-        results = evaluate(
+
+        evaluate(
             predict,
             data=dataset_name,
             evaluators=[
@@ -298,7 +298,7 @@ def main() -> None:
             experiment_prefix="senior-rag-upgrade"
         )
         logger.info("✓ Programmatic evaluation run successfully completed!")
-        logger.info(f"✓ View your evaluation run on LangSmith Dashboard!")
+        logger.info("✓ View your evaluation run on LangSmith Dashboard!")
 
     except Exception as e:
         logger.error(f"Failed to run LangSmith programmatic evaluation: {e}", exc_info=True)

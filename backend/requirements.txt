@@ -2,7 +2,7 @@
 # FastAPI + Server
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
-python-multipart>=0.0.6
+python-multipart>=0.0.32
 
 # Database
 sqlalchemy>=2.0.23

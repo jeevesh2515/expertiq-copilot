@@ -1,10 +1,29 @@
 # ExpertIQ Copilot
 
-> **Enterprise-Grade Expert Discovery, Hybrid Retrieval, & Research Intelligence Platform**
+> **Expert discovery and research assistant using hybrid retrieval, graph expansion, and evaluated LangGraph workflows**
 
-ExpertIQ Copilot is a production-ready, highly-optimized expert discovery platform. It replaces naive search pipelines with a resilient **6-node LangGraph agent network**, dual relational-vector databases, multi-tier fallback caching, and production-grade observability telemetry.
+ExpertIQ Copilot helps a user find and compare experts from structured biographies and research profiles. A six-node LangGraph workflow combines metadata filters, dense retrieval, graph expansion, reranking, and grounded summaries. The repository includes an offline evaluation harness, tracing hooks, Docker Compose, and a 47-case automated test suite.
 
 ---
+
+## Example workflow
+
+**Question:** Find a fintech expert with 15+ years of experience who is available for a short advisory engagement.
+
+**Pipeline:** parse constraints → retrieve candidate profiles → expand related expertise in the graph → rerank against explicit criteria → return a grounded comparison with source fields.
+
+**Output:** ranked experts, matched constraints, supporting profile excerpts, and an explanation of why each result was included.
+
+## Engineering proof
+
+| Area | Evidence |
+|---|---|
+| Orchestration | Six LangGraph nodes with explicit state transitions |
+| Retrieval | Hybrid vector search, metadata filtering, and graph expansion |
+| Grounding | Parent-child chunks and evaluator checks for retrieved evidence |
+| Evaluation | RAGAS harness for relevance, faithfulness, and context precision |
+| Testing | 47 unit and integration cases |
+| Operations | LangSmith tracing, Docker Compose, and FastAPI OpenAPI docs |
 
 ## 🗺️ System Architecture
 
@@ -219,20 +238,29 @@ RUN_RAGAS_EVAL=true venv/bin/pytest tests/eval/test_ragas_eval.py -v -m ragas
 
 ---
 
-## 🚢 Production Deployment
+## 🚢 Deployment notes
 
-### 1. Production Backend (Railway)
+### 1. Backend deployment example (Railway)
 1. Commit your changes and push them to your GitHub repository.
 2. In your **[Railway Dashboard](https://railway.app)**, select your project and navigate to the **Variables** tab on your backend service.
 3. Inject the LangSmith variables and your production database credentials.
 4. The backend increase of `"healthcheckTimeout": 300` in [railway.json](backend/railway.json) ensures Railway has enough time on cold boots to download models from HuggingFace and index profiles successfully.
 
-### 2. Production Frontend (Vercel)
+### 2. Frontend deployment example (Vercel)
 1. Connect your repository to your **[Vercel Dashboard](https://vercel.com)**.
 2. Add the environment variable `NEXT_PUBLIC_API_URL` pointing to your active Railway backend URL.
 3. Click deploy!
 
 ---
+
+## Limitations and status
+
+- Seed data is synthetic/demo data unless otherwise stated.
+- Retrieval quality depends on profile coverage and metadata completeness.
+- Generated summaries are constrained by retrieved evidence but still require review.
+- LangSmith, Groq, vector-store, and database integrations are optional environment dependencies.
+- The repository is a portfolio/research implementation; production hardening requires authentication, rate limits, data governance, and an operational SLO plan.
+- No frontend test suite is configured at present; backend verification is the primary automated quality gate.
 
 ## 🧪 Verification & Test Command Matrix
 

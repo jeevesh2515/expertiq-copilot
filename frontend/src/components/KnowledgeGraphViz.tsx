@@ -217,6 +217,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const alphaRef = useRef(1);
+  const simStateRef = useRef({ settled: true, alpha: 1 });
   
   // Interactive Settings Drawer State
   const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({
@@ -232,24 +233,15 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
     gravity: 0.026,
     spring: 104,
   });
+  const [dimensions, setDimensions] = useState({ width: 380, height: 240 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSettled, setIsSettled] = useState(true);
 
   // Reference for no-delay physics updates inside 60fps canvas ticks
   const repulsionRef = useRef(2600);
   const gravityRef = useRef(0.026);
   const springRef = useRef(104);
 
-  useEffect(() => {
-    repulsionRef.current = simParams.repulsion;
-    gravityRef.current = simParams.gravity;
-    springRef.current = simParams.spring;
-    alphaRef.current = Math.max(alphaRef.current, 0.25);
-    settledRef.current = false;
-    setIsSettled(false);
-  }, [simParams]);
-
-  const [dimensions, setDimensions] = useState({ width: 380, height: 240 });
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isSettled, setIsSettled] = useState(true);
   const hoveredRef = useRef<string | null>(null);
   const transformRef = useRef({ x: 0, y: 0, scale: 1 });
   const isDraggingCanvas = useRef(false);
@@ -260,6 +252,14 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
   const [tooltipNode, setTooltipNode] = useState<ForceNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const frameCountRef = useRef(0);
+
+  useEffect(() => {
+    repulsionRef.current = simParams.repulsion;
+    gravityRef.current = simParams.gravity;
+    springRef.current = simParams.spring;
+    alphaRef.current = Math.max(alphaRef.current, 0.25);
+    simStateRef.current.settled = false;
+  }, [simParams]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -557,9 +557,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
     }
 
     ctx.restore();
-  }, [dimensions, selectedId, graphSearch, activeTypes]);
-
-  const settledRef = useRef(true);
+  }, [dimensions, selectedId, graphSearch]);
 
   // Main simulation effect
   useEffect(() => {
@@ -573,16 +571,18 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
     }
 
     alphaRef.current = 1.0;
-    settledRef.current = false;
+    simStateRef.current.settled = false;
+    simStateRef.current.alpha = 1.0;
 
     const iterate = () => {
-      if (!settledRef.current) setIsSettled(false);
+      if (!simStateRef.current.settled) setIsSettled(false);
       const { nodes, links } = simRef.current;
       const alpha = alphaRef.current;
 
       if (alpha < ALPHA_MIN) {
-        if (!settledRef.current) {
-          settledRef.current = true;
+        if (!simStateRef.current.settled) {
+          simStateRef.current.settled = true;
+          simStateRef.current.alpha = alpha;
           setIsSettled(true);
         }
         renderCanvas();
@@ -601,6 +601,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
       );
 
       alphaRef.current = alpha * (1 - ALPHA_DECAY);
+      simStateRef.current.alpha = alphaRef.current;
       renderCanvas();
       animRef.current = requestAnimationFrame(iterate);
     };
@@ -613,7 +614,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
 
   // Idle animation for flow dots when graph settled
   useEffect(() => {
-    if (!settledRef.current) return;
+    if (!simStateRef.current.settled) return;
     let running = true;
     const animateFlow = () => {
       if (!running) return;
@@ -696,12 +697,13 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
           dragged.vx = 0;
           dragged.vy = 0;
           alphaRef.current = Math.max(alphaRef.current, 0.15);
-          if (settledRef.current) {
-            settledRef.current = false;
+          if (simStateRef.current.settled) {
+            simStateRef.current.settled = false;
             setIsSettled(false);
             const reheat = () => {
               if (alphaRef.current < ALPHA_MIN) {
-                settledRef.current = true;
+                simStateRef.current.settled = true;
+                simStateRef.current.alpha = alphaRef.current;
                 setIsSettled(true);
                 renderCanvas();
                 return;
@@ -719,6 +721,7 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
                 springRef.current
               );
               alphaRef.current = a * (1 - ALPHA_DECAY);
+              simStateRef.current.alpha = alphaRef.current;
               renderCanvas();
               animRef.current = requestAnimationFrame(reheat);
             };
@@ -824,29 +827,28 @@ function KnowledgeGraphViz({ data, selectedId, hideHeader, onSelectNode }: Knowl
     }));
   };
 
-  if (!data || !data.nodes || !data.nodes.length) return null;
-
   // Get connected node names for tooltip
-  const getConnectedNames = (nodeId: string) => {
-    const { links, nodeMap } = simRef.current;
+  const getConnectedNames = useCallback((nodeId: string) => {
     const connected: { id: string; label: string }[] = [];
     const seen = new Set<string>();
-    for (const link of links) {
-      let targetId: string | null = null;
-      if (link.sourceNode.id === nodeId) {
-        targetId = link.targetNode.id;
-      } else if (link.targetNode.id === nodeId) {
-        targetId = link.sourceNode.id;
-      }
+    for (const edge of data.edges || []) {
+        let targetId: string | null = null;
+        if (edge.source === nodeId) {
+          targetId = edge.target;
+        } else if (edge.target === nodeId) {
+          targetId = edge.source;
+        }
 
-      if (targetId && !seen.has(targetId)) {
-        seen.add(targetId);
-        const n = nodeMap.get(targetId);
-        if (n) connected.push({ id: n.id, label: n.label });
+        if (targetId && !seen.has(targetId)) {
+          seen.add(targetId);
+          const n = data.nodes?.find((node) => node.id === targetId);
+          if (n) connected.push({ id: n.id, label: n.label });
+        }
       }
-    }
-    return connected.slice(0, 5);
-  };
+      return connected.slice(0, 5);
+    }, [data]);
+
+    if (!data || !data.nodes || !data.nodes.length) return null;
 
   return (
     <div

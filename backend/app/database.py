@@ -122,6 +122,7 @@ def get_db() -> Session:
 def init_db() -> None:
     """Create all tables defined by ORM models."""
     # Import all models here to register them with Base
+    from app.models import Expert, User, Bookmark, SearchHistory, Feedback  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
     # Dynamic Column Migration: check if search_history is missing the thread_id column and add it safely

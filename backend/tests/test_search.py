@@ -7,17 +7,8 @@ Covers query validation, sanitisation, and search endpoint behaviour.
 import pytest
 from fastapi.testclient import TestClient
 
-from app.database import Base, engine
 from app.main import app
 from app.schemas.search import SearchRequest
-
-
-@pytest.fixture(autouse=True)
-def setup_db():
-    """Create tables before each test, drop after."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture

@@ -14,9 +14,9 @@ from app.core.rag_pipeline import get_rag_pipeline, seed_document_chunks
 from app.core.agent import get_agent
 
 
-@pytest.fixture(autouse=True)
-def setup_db():
-    """Isolate testing inside fresh SQLite tables and clean vector collections."""
+@pytest.fixture
+def rag_test_data():
+    """Set up test data for RAG evaluation tests: experts, document chunks, vector indexes."""
     from app.core.vector_store import get_vector_store
     vs = get_vector_store()
     try:
@@ -28,8 +28,9 @@ def setup_db():
     except Exception:
         pass
 
-    Base.metadata.create_all(bind=engine)
+    # Tables already exist from session-scoped _session_schema fixture
     db = SessionLocal()
+    experts = []
     try:
         # Seed concrete test profiles matching specific query filters
         experts = [
@@ -80,14 +81,21 @@ def setup_db():
         search_engine = get_lightweight_search_engine()
         search_engine.refresh([e.to_dict() for e in experts])
 
+        yield experts
+
     finally:
         db.close()
+        # Clean up test data but DON'T drop tables (session fixture handles that)
+        db = SessionLocal()
+        try:
+            for expert in experts:
+                db.query(Expert).filter(Expert.id == expert.id).delete()
+            db.commit()
+        finally:
+            db.close()
 
-    yield
-    Base.metadata.drop_all(bind=engine)
 
-
-def test_parent_child_resolution_and_deduplication() -> None:
+def test_parent_child_resolution_and_deduplication(rag_test_data) -> None:
     """Assert child sentences resolve to full parent bios with no duplicates."""
     from app.core.vector_store import get_vector_store
     vs = get_vector_store()
@@ -114,7 +122,7 @@ def test_parent_child_resolution_and_deduplication() -> None:
     assert context.count("An experienced principal security architect specializing") == 1
 
 
-def test_self_query_constraints_context_precision() -> None:
+def test_self_query_constraints_context_precision(rag_test_data) -> None:
     """Verify that QueryAnalyser extracts constraints and VectorSearcher filters them strictly."""
     agent = get_agent()
 
@@ -139,7 +147,7 @@ def test_self_query_constraints_context_precision() -> None:
         assert expert["industry"] == "FinTech"
 
 
-def test_faithfulness_and_hallucination_prevention() -> None:
+def test_faithfulness_and_hallucination_prevention(rag_test_data) -> None:
     """Benchmark that LLM executive summaries strictly match retrieved expert nodes."""
     agent = get_agent()
     state = agent.run(

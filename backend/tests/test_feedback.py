@@ -4,20 +4,13 @@ Tests for the search feedback API.
 
 import pytest
 from fastapi.testclient import TestClient
-from app.database import Base, engine
+from app.database import SessionLocal
 from app.main import app
-
-
-@pytest.fixture(autouse=True)
-def setup_db():
-    """Create tables before each test, drop after."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
+from app.models.expert import Expert
 
 
 @pytest.fixture
-def client():
+def client() -> TestClient:
     """FastAPI test client."""
     return TestClient(app, raise_server_exceptions=False)
 
@@ -40,8 +33,6 @@ def auth_headers(client: TestClient) -> dict:
 @pytest.fixture
 def seed_expert(client: TestClient, auth_headers: dict) -> str:
     """Create an expert profile in the db and return its ID."""
-    from app.database import SessionLocal
-    from app.models.expert import Expert
 
     db = SessionLocal()
     try:
